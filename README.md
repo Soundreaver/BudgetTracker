@@ -12,9 +12,9 @@ A comprehensive React Native budget tracking application built with Expo, design
 ![Transactions](screenshots/transactions.png)
 ![Budget Overview](screenshots/budget.png) -->
 <p align="center">
-  <img src="screenshots/home.png" alt="Home Screen" width="250" />
-  <img src="screenshots/expenses.png" alt="Expenses Screen" width="250" />
-  <img src="screenshots/stats.png" alt="Stats Screen" width="250" />
+  <img src="screenshots/dashboard.png" alt="Home Screen" width="250" />
+  <img src="screenshots/transactions.png" alt="Expenses Screen" width="250" />
+  <img src="screenshots/budget.png" alt="Stats Screen" width="250" />
 </p>
 
 ## ✨ Features
