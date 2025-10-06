@@ -57,3 +57,13 @@ export {
   isSavingsGoalCompleted,
   getTotalSavings,
 } from './savingsGoalService';
+
+// Notification services
+export {
+  requestNotificationPermissions,
+  scheduleBudgetAlert,
+  checkBudgetThresholds,
+  cancelAllNotifications,
+  getBadgeCount,
+  setBadgeCount,
+} from './notificationService';

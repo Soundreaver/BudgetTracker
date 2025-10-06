@@ -3,6 +3,8 @@ import { TextInput, View, Text, StyleSheet, TouchableOpacity } from 'react-nativ
 import { MotiView } from 'moti';
 import { triggerHaptic } from '@/utils/haptics';
 import { colors, spacing, borderRadius, typography } from '@/constants/theme';
+import { useSettingsStore } from '@/store';
+import { getCurrencyByCode } from '@/utils/currency';
 
 interface AmountInputProps {
   value: string;
@@ -18,13 +20,16 @@ interface AmountInputProps {
 export const AmountInput: React.FC<AmountInputProps> = ({
   value,
   onChangeValue,
-  currency = '$',
+  currency: currencyProp,
   label,
   error,
   accessibilityLabel,
   maxAmount,
   suggestedAmounts = [10, 20, 50, 100],
 }) => {
+  const { currency: currencyCode } = useSettingsStore();
+  const selectedCurrency = getCurrencyByCode(currencyCode);
+  const currency = currencyProp || selectedCurrency.symbol;
   const formatAmount = (text: string) => {
     // Remove non-numeric characters except decimal point
     const cleaned = text.replace(/[^0-9.]/g, '');

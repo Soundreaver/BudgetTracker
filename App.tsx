@@ -16,6 +16,7 @@ import {
   StatisticsScreen,
   BudgetScreen,
   SavingsGoalsScreen,
+  SettingsScreen,
 } from './src/screens';
 
 const Tab = createBottomTabNavigator();
@@ -94,6 +95,15 @@ function MainNavigator() {
             <Ionicons name="wallet-outline" size={24} color={color} />
           ),
           headerTitle: 'Savings Goals',
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="settings-outline" size={24} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>

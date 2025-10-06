@@ -25,8 +25,9 @@ import {
   CustomInput,
   CustomButton,
 } from '@/components/ui';
-import { useAuthStore, useBudgetStore, useTransactionStore } from '@/store';
+import { useAuthStore, useBudgetStore, useTransactionStore, useSettingsStore } from '@/store';
 import { getAllCategories } from '@/services/categoryService';
+import { getCurrencyByCode, formatCurrency } from '@/utils/currency';
 import type { Category } from '@/types/database';
 
 const { width } = Dimensions.get('window');
@@ -49,6 +50,8 @@ export const DashboardScreen: React.FC = () => {
   const { user } = useAuthStore();
   const { activeBudgets, loadActiveBudgets } = useBudgetStore();
   const { filteredTransactions, loadTransactions, getTotals, addTransaction } = useTransactionStore();
+  const { currency: currencyCode } = useSettingsStore();
+  const currency = getCurrencyByCode(currencyCode);
 
   useEffect(() => {
     loadData();
@@ -73,6 +76,11 @@ export const DashboardScreen: React.FC = () => {
 
   const handleFABPress = async () => {
     await triggerHaptic('medium');
+    
+    // Reload categories when opening modal
+    const loadedCategories = getAllCategories();
+    setCategories(loadedCategories);
+    
     setShowTransactionModal(true);
   };
 
@@ -176,7 +184,7 @@ export const DashboardScreen: React.FC = () => {
           >
             <Text style={styles.balanceLabel}>Total Balance</Text>
             <Text style={styles.balanceAmount}>
-              ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(balance, currencyCode)}
             </Text>
           </MotiView>
         </MotiView>
@@ -184,6 +192,7 @@ export const DashboardScreen: React.FC = () => {
         {/* Quick Stats Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Stats</Text>
+          <View style={styles.sectionSpacer} />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -191,14 +200,14 @@ export const DashboardScreen: React.FC = () => {
           >
             <StatCard
               title="This Month's Income"
-              value={`$${totals.income.toFixed(2)}`}
+              value={formatCurrency(totals.income, currencyCode)}
               variant="success"
               trend={{ value: 12, isPositive: true }}
               delay={0}
             />
             <StatCard
               title="This Month's Expenses"
-              value={`$${totals.expenses.toFixed(2)}`}
+              value={formatCurrency(totals.expenses, currencyCode)}
               variant="error"
               trend={{ value: 8, isPositive: false }}
               delay={100}
@@ -229,6 +238,7 @@ export const DashboardScreen: React.FC = () => {
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
+            <View style={styles.sectionSpacer} />
             {activeBudgets.slice(0, 3).map((budget, index) => (
               <MotiView
                 key={budget.id}
@@ -257,6 +267,7 @@ export const DashboardScreen: React.FC = () => {
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.sectionSpacer} />
           {recentTransactions.length > 0 ? (
             recentTransactions.map((transaction) => (
               <TransactionCard
@@ -355,7 +366,6 @@ export const DashboardScreen: React.FC = () => {
         <AmountInput
           value={amount}
           onChangeValue={setAmount}
-          currency="$"
           label="Amount"
           suggestedAmounts={[10, 25, 50, 100, 200]}
         />
@@ -374,26 +384,32 @@ export const DashboardScreen: React.FC = () => {
           )}
         </View>
 
-        <DateTimePicker
-          value={selectedDate}
-          onChange={setSelectedDate}
-          mode="date"
-          label="Date"
-        />
+        <View style={{ marginTop: spacing.md }}>
+          <DateTimePicker
+            value={selectedDate}
+            onChange={setSelectedDate}
+            mode="date"
+            label="Date"
+          />
+        </View>
 
-        <CustomInput
-          label="Description"
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Enter description..."
-        />
+        <View style={{ marginTop: spacing.md }}>
+          <CustomInput
+            label="Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Enter description..."
+          />
+        </View>
 
-        <CustomInput
-          label="Payment Method"
-          value={paymentMethod}
-          onChangeText={setPaymentMethod}
-          placeholder="Cash, Card, etc."
-        />
+        <View style={{ marginTop: spacing.md }}>
+          <CustomInput
+            label="Payment Method"
+            value={paymentMethod}
+            onChangeText={setPaymentMethod}
+            placeholder="Cash, Card, etc."
+          />
+        </View>
 
         <TouchableOpacity
           onPress={() => setIsRecurring(!isRecurring)}
@@ -519,11 +535,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
   },
   sectionTitle: {
     ...typography.heading5,
     color: colors.neutral[900],
+  },
+  sectionSpacer: {
+    height: spacing.md,
   },
   seeAllText: {
     ...typography.caption,
@@ -533,6 +551,7 @@ const styles = StyleSheet.create({
   quickStatsContainer: {
     gap: spacing.md,
     paddingRight: spacing.xl,
+    flexDirection: 'row',
   },
   emptyTransactions: {
     alignItems: 'center',

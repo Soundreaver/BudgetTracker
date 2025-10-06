@@ -10,6 +10,9 @@ import {
   getTotalExpenses,
   getTotalIncome,
 } from '@/services';
+import { getActiveBudgets, getBudgetSpending } from '@/services/budgetService';
+import { getCategoryById } from '@/services/categoryService';
+import { scheduleBudgetAlert } from '@/services/notificationService';
 
 type SortBy = 'date' | 'amount' | 'category';
 type SortOrder = 'asc' | 'desc';
@@ -37,6 +40,7 @@ interface TransactionState {
   // Actions
   loadTransactions: () => void;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => void;
+  checkBudgetThresholds: (transaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   editTransaction: (id: number, updates: Partial<Transaction>) => void;
   removeTransaction: (id: number) => void;
   selectTransaction: (id: number | null) => void;
@@ -85,12 +89,80 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
     }
   },
 
-  addTransaction: (transaction) => {
+  addTransaction: async (transaction) => {
     try {
+      // Check budget thresholds BEFORE adding transaction
+      // This allows us to compare before/after spending
+      if (transaction.type === 'expense') {
+        await get().checkBudgetThresholds(transaction);
+      }
+      
       createTransaction(transaction);
       get().refreshTransactions();
     } catch (error) {
       console.error('Failed to create transaction:', error);
+    }
+  },
+
+  checkBudgetThresholds: async (newTransaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      const budgets = getActiveBudgets();
+      
+      for (const budget of budgets) {
+        // Check if this transaction affects this budget
+        const affectsBudget = budget.category_id === null || budget.category_id === newTransaction.category_id;
+        
+        if (!affectsBudget) continue;
+        
+        // Get current spending BEFORE this transaction
+        const currentSpent = getBudgetSpending(budget);
+        
+        // Calculate what spending will be AFTER this transaction
+        const totalSpent = currentSpent + newTransaction.amount;
+        const percentage = (totalSpent / budget.amount) * 100;
+        const previousPercentage = (currentSpent / budget.amount) * 100;
+        const threshold = budget.alert_threshold || 80;
+        
+        console.log('Threshold Check Debug:', {
+          budget_amount: budget.amount,
+          current_spent: currentSpent,
+          new_transaction_amount: newTransaction.amount,
+          total_will_be: totalSpent,
+          percentage: percentage.toFixed(1) + '%',
+          threshold: threshold + '%',
+        });
+        
+        // Get category name
+        let categoryName = 'All Categories';
+        if (budget.category_id !== null) {
+          const category = getCategoryById(budget.category_id);
+          categoryName = category?.name || 'Category';
+        }
+        
+        // Check if threshold is crossed (was below, now at or above)
+        if (percentage >= threshold && previousPercentage < threshold) {
+          await scheduleBudgetAlert({
+            budgetId: budget.id,
+            categoryName,
+            percentage,
+            spent: totalSpent,
+            total: budget.amount,
+          });
+        }
+        
+        // Also check 100% threshold
+        if (percentage >= 100 && previousPercentage < 100) {
+          await scheduleBudgetAlert({
+            budgetId: budget.id,
+            categoryName,
+            percentage,
+            spent: totalSpent,
+            total: budget.amount,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check budget thresholds:', error);
     }
   },
 

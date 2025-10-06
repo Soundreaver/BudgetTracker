@@ -5,6 +5,8 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { triggerHaptic } from '@/utils/haptics';
 import { colors, spacing, borderRadius, typography, shadows } from '@/constants/theme';
 import { format } from 'date-fns';
+import { useSettingsStore } from '@/store';
+import { formatCurrency } from '@/utils/currency';
 
 interface TransactionCardProps {
   id: number;
@@ -51,29 +53,23 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
   const renderRightActions = () => {
     return (
       <View style={styles.actionsContainer}>
-        {onEdit && (
-          <TouchableOpacity
-            onPress={handleEdit}
-            style={[styles.actionButton, styles.editButton]}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.actionText}>Edit</Text>
-          </TouchableOpacity>
-        )}
         {onDelete && (
           <TouchableOpacity
             onPress={handleDelete}
-            style={[styles.actionButton, styles.deleteButton]}
-            activeOpacity={0.7}
+            style={styles.deleteButton}
+            activeOpacity={0.8}
           >
-            <Text style={styles.actionText}>Delete</Text>
+            <Text style={styles.deleteIcon}>🗑️</Text>
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
-  const formattedAmount = type === 'expense' ? `-$${amount.toFixed(2)}` : `+$${amount.toFixed(2)}`;
+  const { currency: currencyCode } = useSettingsStore();
+  const formattedAmount = type === 'expense' 
+    ? `-${formatCurrency(amount, currencyCode)}` 
+    : `+${formatCurrency(amount, currencyCode)}`;
   const amountColor = type === 'expense' ? colors.error[500] : colors.success[500];
 
   return (
@@ -160,25 +156,19 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: spacing.sm,
-  },
-  actionButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    height: '100%',
-    borderRadius: borderRadius.lg,
-  },
-  editButton: {
-    backgroundColor: colors.primary[500],
-    marginRight: spacing.xs,
+    justifyContent: 'flex-end',
+    marginLeft: spacing.xs,
   },
   deleteButton: {
     backgroundColor: colors.error[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 60,
+    height: 76,
+    borderRadius: borderRadius.lg,
+    ...shadows.sm,
   },
-  actionText: {
-    ...typography.caption,
-    color: colors.white,
-    fontWeight: '600',
+  deleteIcon: {
+    fontSize: 24,
   },
 });

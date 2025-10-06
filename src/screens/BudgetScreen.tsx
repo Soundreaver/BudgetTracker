@@ -22,8 +22,11 @@ import {
   StatCard,
   EmptyState,
 } from '@/components/ui';
-import { useBudgetStore, useSettingsStore } from '@/store';
-import type { BudgetPeriod } from '@/types/database';
+import { useBudgetStore, useSettingsStore, useTransactionStore } from '@/store';
+import { getCurrencyByCode, formatCurrency } from '@/utils/currency';
+import { getAllCategories, getCategoryById } from '@/services/categoryService';
+import { getBudgetSpending } from '@/services/budgetService';
+import type { BudgetPeriod, Category } from '@/types/database';
 
 interface BudgetCardData {
   id: number;
@@ -41,6 +44,7 @@ export const BudgetScreen: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Add budget form state
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -55,13 +59,31 @@ export const BudgetScreen: React.FC = () => {
   const [alertAt100, setAlertAt100] = useState(true);
 
   const { activeBudgets, loadActiveBudgets, addBudget, removeBudget } = useBudgetStore();
+  const { currency: currencyCode } = useSettingsStore();
+  const transactions = useTransactionStore(state => state.transactions);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [transactions]);
 
   const loadData = async () => {
     await loadActiveBudgets();
+    
+    // Load categories
+    const loadedCategories = getAllCategories();
+    
+    // Add "All Categories" option at the beginning
+    const allCategoriesOption: Category = {
+      id: 0,
+      name: 'All Categories',
+      icon: '📊',
+      color: colors.primary[500],
+      type: 'expense',
+      budget_limit: null,
+      created_at: new Date().toISOString(),
+    };
+    
+    setCategories([allCategoriesOption, ...loadedCategories]);
   };
 
   const handleRefresh = async () => {
@@ -71,21 +93,28 @@ export const BudgetScreen: React.FC = () => {
   };
 
   const handleAddBudget = async () => {
-    if (!selectedCategory || !budgetAmount) {
+    if (!budgetAmount) {
       await triggerHaptic('error');
+      alert('Please enter a budget amount');
       return;
     }
 
     await triggerHaptic('success');
 
-    const endDate = addMonths(startDate, selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'yearly' ? 12 : 0);
+    // Always start budget from TODAY to avoid counting old transactions
+    const today = new Date();
+    const endDate = addMonths(today, selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'yearly' ? 12 : 0);
+
+    // If no category selected or "All Categories" (id: 0), set category_id to null
+    const categoryId = selectedCategory === 0 ? null : selectedCategory;
 
     addBudget({
-      category_id: selectedCategory,
+      category_id: categoryId || null,
       amount: parseFloat(budgetAmount),
       period: selectedPeriod,
-      start_date: format(startDate, 'yyyy-MM-dd'),
+      start_date: format(today, 'yyyy-MM-dd'),
       end_date: format(endDate, 'yyyy-MM-dd'),
+      alert_threshold: parseInt(alertThreshold) || 80,
     });
 
     // Reset form
@@ -102,18 +131,34 @@ export const BudgetScreen: React.FC = () => {
     removeBudget(id);
   };
 
-  // Mock budget cards data - would be calculated from budgets + transactions
-  const budgetCards: BudgetCardData[] = activeBudgets.map((budget) => ({
-    id: budget.id,
-    categoryName: 'Category', // Would get from category service
-    categoryIcon: '💰',
-    categoryColor: colors.primary[500],
-    amount: budget.amount,
-    spent: Math.random() * budget.amount, // Would calculate from transactions
-    period: budget.period,
-    startDate: budget.start_date,
-    endDate: budget.end_date,
-  }));
+  // Calculate budget card data with real spending
+  const budgetCards: BudgetCardData[] = activeBudgets.map((budget) => {
+    const spent = getBudgetSpending(budget);
+    let categoryName = 'All Categories';
+    let categoryIcon = '📊';
+    let categoryColor = colors.primary[500];
+
+    if (budget.category_id) {
+      const category = getCategoryById(budget.category_id);
+      if (category) {
+        categoryName = category.name;
+        categoryIcon = category.icon;
+        categoryColor = category.color;
+      }
+    }
+
+    return {
+      id: budget.id,
+      categoryName,
+      categoryIcon,
+      categoryColor,
+      amount: budget.amount,
+      spent,
+      period: budget.period,
+      startDate: budget.start_date,
+      endDate: budget.end_date,
+    };
+  });
 
   const totalBudgeted = budgetCards.reduce((sum, b) => sum + b.amount, 0);
   const totalSpent = budgetCards.reduce((sum, b) => sum + b.spent, 0);
@@ -142,16 +187,11 @@ export const BudgetScreen: React.FC = () => {
     const renderRightActions = () => (
       <View style={styles.swipeActions}>
         <TouchableOpacity
-          onPress={() => console.log('Edit', budget.id)}
-          style={[styles.swipeAction, styles.editAction]}
-        >
-          <Text style={styles.swipeActionText}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           onPress={() => handleDeleteBudget(budget.id)}
-          style={[styles.swipeAction, styles.deleteAction]}
+          style={styles.deleteAction}
+          activeOpacity={0.8}
         >
-          <Text style={styles.swipeActionText}>Delete</Text>
+          <Text style={styles.deleteIcon}>🗑️</Text>
         </TouchableOpacity>
       </View>
     );
@@ -208,12 +248,12 @@ export const BudgetScreen: React.FC = () => {
                   <View style={styles.amountRow}>
                     <Text style={styles.amountLabel}>Spent</Text>
                     <Text style={[styles.amountValue, { color: progressColor }]}>
-                      ${budget.spent.toFixed(2)}
+                      {formatCurrency(budget.spent, currencyCode)}
                     </Text>
                   </View>
                   <View style={styles.amountRow}>
                     <Text style={styles.amountLabel}>Budget</Text>
-                    <Text style={styles.amountValue}>${budget.amount.toFixed(2)}</Text>
+                    <Text style={styles.amountValue}>{formatCurrency(budget.amount, currencyCode)}</Text>
                   </View>
                   <View style={styles.amountRow}>
                     <Text style={styles.amountLabel}>Remaining</Text>
@@ -223,7 +263,7 @@ export const BudgetScreen: React.FC = () => {
                         { color: remaining < 0 ? colors.error[500] : colors.success[500] },
                       ]}
                     >
-                      ${Math.abs(remaining).toFixed(2)}
+                      {formatCurrency(Math.abs(remaining), currencyCode)}
                     </Text>
                   </View>
                 </View>
@@ -263,33 +303,42 @@ export const BudgetScreen: React.FC = () => {
           style={styles.section}
         >
           <Text style={styles.sectionTitle}>Budget Insights</Text>
+          <View style={styles.sectionSpacer} />
 
           <View style={styles.insightsGrid}>
-            <StatCard
-              title="Total Budgeted"
-              value={`$${totalBudgeted.toFixed(2)}`}
-              variant="primary"
-              delay={0}
-            />
-            <StatCard
-              title="Actual Spent"
-              value={`$${totalSpent.toFixed(2)}`}
-              variant={totalSpent > totalBudgeted ? 'error' : 'success'}
-              delay={100}
-            />
-            <StatCard
-              title="Utilization Rate"
-              value={`${utilizationRate.toFixed(1)}%`}
-              variant={utilizationRate > 90 ? 'warning' : 'primary'}
-              delay={200}
-            />
-            <StatCard
-              title="Without Budgets"
-              value={`${categoriesWithoutBudgets}`}
-              subtitle="categories"
-              variant="warning"
-              delay={300}
-            />
+            <View style={styles.insightCard}>
+              <StatCard
+                title="Total Budgeted"
+                value={formatCurrency(totalBudgeted, currencyCode)}
+                variant="primary"
+                delay={0}
+              />
+            </View>
+            <View style={styles.insightCard}>
+              <StatCard
+                title="Actual Spent"
+                value={formatCurrency(totalSpent, currencyCode)}
+                variant={totalSpent > totalBudgeted ? 'error' : 'success'}
+                delay={100}
+              />
+            </View>
+            <View style={styles.insightCard}>
+              <StatCard
+                title="Utilization Rate"
+                value={`${utilizationRate.toFixed(1)}%`}
+                variant={utilizationRate > 90 ? 'warning' : 'primary'}
+                delay={200}
+              />
+            </View>
+            <View style={styles.insightCard}>
+              <StatCard
+                title="Without Budgets"
+                value={`${categoriesWithoutBudgets}`}
+                subtitle="categories"
+                variant="warning"
+                delay={300}
+              />
+            </View>
           </View>
         </MotiView>
 
@@ -301,6 +350,7 @@ export const BudgetScreen: React.FC = () => {
               <Text style={styles.settingsIcon}>⚙️</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.sectionSpacer} />
 
           {budgetCards.length > 0 ? (
             budgetCards.map(renderBudgetCard)
@@ -323,7 +373,10 @@ export const BudgetScreen: React.FC = () => {
         style={styles.fabContainer}
       >
         <TouchableOpacity
-          onPress={() => setShowAddModal(true)}
+          onPress={() => {
+            loadData(); // Reload categories when opening modal
+            setShowAddModal(true);
+          }}
           activeOpacity={0.8}
           style={[styles.fab, shadows.xl]}
         >
@@ -340,9 +393,9 @@ export const BudgetScreen: React.FC = () => {
       >
         <View style={styles.modalContent}>
           <View style={styles.modalSection}>
-            <Text style={styles.modalSectionTitle}>Category</Text>
+            <Text style={styles.modalSectionTitle}>Category (Optional - Leave blank for all)</Text>
             <CategoryPicker
-              categories={[]} // Would load from category service
+              categories={categories}
               selectedId={selectedCategory || undefined}
               onSelect={(cat) => setSelectedCategory(cat.id)}
               columns={4}
@@ -352,7 +405,6 @@ export const BudgetScreen: React.FC = () => {
           <AmountInput
             value={budgetAmount}
             onChangeValue={setBudgetAmount}
-            currency="$"
             label="Budget Amount"
             suggestedAmounts={[100, 250, 500, 1000]}
           />
@@ -382,12 +434,11 @@ export const BudgetScreen: React.FC = () => {
             </View>
           </View>
 
-          <DateTimePicker
-            value={startDate}
-            onChange={setStartDate}
-            mode="date"
-            label="Start Date"
-          />
+          <View style={styles.infoBox}>
+            <Text style={styles.infoText}>
+              💡 Budget will start from today and track new expenses only
+            </Text>
+          </View>
 
           <CustomInput
             label="Alert Threshold (%)"
@@ -493,7 +544,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+  },
+  sectionSpacer: {
+    height: spacing.md,
   },
   sectionTitle: {
     ...typography.heading5,
@@ -505,7 +558,11 @@ const styles = StyleSheet.create({
   insightsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: spacing.md,
+  },
+  insightCard: {
+    width: '48%',
   },
   budgetCard: {
     backgroundColor: colors.white,
@@ -613,26 +670,20 @@ const styles = StyleSheet.create({
   swipeActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: spacing.sm,
-  },
-  swipeAction: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    height: '100%',
-    borderRadius: borderRadius.lg,
-  },
-  editAction: {
-    backgroundColor: colors.primary[500],
-    marginRight: spacing.xs,
+    justifyContent: 'flex-end',
+    marginLeft: spacing.xs,
   },
   deleteAction: {
     backgroundColor: colors.error[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 60,
+    height: 136,
+    borderRadius: borderRadius.lg,
+    ...shadows.sm,
   },
-  swipeActionText: {
-    ...typography.caption,
-    color: colors.white,
-    fontWeight: '600',
+  deleteIcon: {
+    fontSize: 28,
   },
   fabContainer: {
     position: 'absolute',
@@ -737,5 +788,17 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  infoBox: {
+    backgroundColor: colors.primary[50],
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary[500],
+  },
+  infoText: {
+    ...typography.caption,
+    color: colors.primary[700],
+    lineHeight: 18,
   },
 });

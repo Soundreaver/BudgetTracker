@@ -50,9 +50,16 @@ export const getBudgetsByPeriod = (period: 'weekly' | 'monthly' | 'yearly'): Bud
 export const createBudget = (budget: BudgetInsert): number => {
   const db = openDatabase();
   const result = db.runSync(
-    `INSERT INTO budgets (category_id, amount, period, start_date, end_date) 
-     VALUES (?, ?, ?, ?, ?)`,
-    [budget.category_id, budget.amount, budget.period, budget.start_date, budget.end_date]
+    `INSERT INTO budgets (category_id, amount, period, start_date, end_date, alert_threshold) 
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      budget.category_id,
+      budget.amount,
+      budget.period,
+      budget.start_date,
+      budget.end_date,
+      budget.alert_threshold ?? 80
+    ]
   );
   return result.lastInsertRowId;
 };
@@ -83,6 +90,10 @@ export const updateBudget = (id: number, updates: Partial<BudgetInsert>): void =
     fields.push('end_date = ?');
     values.push(updates.end_date);
   }
+  if (updates.alert_threshold !== undefined) {
+    fields.push('alert_threshold = ?');
+    values.push(updates.alert_threshold);
+  }
 
   if (fields.length === 0) return;
 
@@ -97,17 +108,34 @@ export const deleteBudget = (id: number): void => {
 };
 
 // Get budget spending for a specific budget
-export const getBudgetSpending = (budgetId: number): number => {
+export const getBudgetSpending = (budget: Budget): number => {
   const db = openDatabase();
-  const budget = getBudgetById(budgetId);
   
-  if (!budget) return 0;
+  // Only count transactions created AFTER the budget was created
+  // This ensures budgets start fresh and don't count old transactions
+  let query = `SELECT SUM(amount) as total FROM transactions 
+               WHERE type = 'expense' 
+               AND date(date) >= date(?) 
+               AND date(date) <= date(?)
+               AND datetime(created_at) >= datetime(?)`;
+  const params: any[] = [budget.start_date, budget.end_date, budget.created_at];
 
-  const result = db.getFirstSync<{ total: number | null }>(
-    `SELECT SUM(amount) as total FROM transactions 
-     WHERE category_id = ? AND type = 'expense' AND date BETWEEN ? AND ?`,
-    [budget.category_id, budget.start_date, budget.end_date]
-  );
+  if (budget.category_id !== null) {
+    query += ` AND category_id = ?`;
+    params.push(budget.category_id);
+  }
+
+  const result = db.getFirstSync<{ total: number | null }>(query, params);
+  
+  // Debug logging
+  console.log('Budget Spending Debug:', {
+    budget_id: budget.id,
+    category_id: budget.category_id,
+    start_date: budget.start_date,
+    end_date: budget.end_date,
+    budget_created_at: budget.created_at,
+    total_spent: result?.total ?? 0,
+  });
 
   return result?.total ?? 0;
 };
@@ -117,6 +145,6 @@ export const getBudgetProgress = (budgetId: number): number => {
   const budget = getBudgetById(budgetId);
   if (!budget) return 0;
 
-  const spending = getBudgetSpending(budgetId);
+  const spending = getBudgetSpending(budget);
   return (spending / budget.amount) * 100;
 };

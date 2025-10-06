@@ -62,20 +62,22 @@ export interface TransactionUpdate {
 // Budget Interface
 export interface Budget {
   id: number;
-  category_id: number;
+  category_id: number | null; // null means "All Categories"
   amount: number;
   period: BudgetPeriod;
   start_date: string;
   end_date: string;
+  alert_threshold?: number; // Percentage threshold for alerts (e.g., 80)
   created_at: string;
 }
 
 export interface BudgetInsert {
-  category_id: number;
+  category_id: number | null; // null means "All Categories"
   amount: number;
   period: BudgetPeriod;
   start_date: string;
   end_date: string;
+  alert_threshold?: number;
 }
 
 // Savings Goal Interface

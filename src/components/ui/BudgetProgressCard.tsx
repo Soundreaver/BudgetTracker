@@ -3,6 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { MotiView } from 'moti';
 import { colors, spacing, borderRadius, typography, shadows } from '@/constants/theme';
 import { ProgressBar } from './ProgressBar';
+import { useSettingsStore } from '@/store';
+import { formatCurrency } from '@/utils/currency';
 
 interface BudgetProgressCardProps {
   categoryName: string;
@@ -23,6 +25,7 @@ export const BudgetProgressCard: React.FC<BudgetProgressCardProps> = ({
   period,
   progressType = 'linear',
 }) => {
+  const { currency: currencyCode } = useSettingsStore();
   const percentage = (spentAmount / budgetAmount) * 100;
   const remaining = budgetAmount - spentAmount;
   const isOverBudget = spentAmount > budgetAmount;
@@ -69,7 +72,7 @@ export const BudgetProgressCard: React.FC<BudgetProgressCardProps> = ({
                 { color: isOverBudget ? colors.error[500] : colors.neutral[900] },
               ]}
             >
-              ${spentAmount.toFixed(2)}
+              {formatCurrency(spentAmount, currencyCode)}
             </Text>
           </View>
           <View style={styles.amountItem}>
@@ -88,12 +91,12 @@ export const BudgetProgressCard: React.FC<BudgetProgressCardProps> = ({
                 },
               ]}
             >
-              ${Math.abs(remaining).toFixed(2)}
+              {formatCurrency(Math.abs(remaining), currencyCode)}
             </Text>
           </View>
           <View style={styles.amountItem}>
             <Text style={styles.amountLabel}>Budget</Text>
-            <Text style={styles.amountValue}>${budgetAmount.toFixed(2)}</Text>
+            <Text style={styles.amountValue}>{formatCurrency(budgetAmount, currencyCode)}</Text>
           </View>
         </View>
 

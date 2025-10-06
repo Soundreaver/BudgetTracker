@@ -90,3 +90,26 @@ export const getCategoryCount = (): number => {
   const result = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM categories');
   return result?.count ?? 0;
 };
+
+// Seed default categories if none exist
+export const seedDefaultCategories = (): void => {
+  const count = getCategoryCount();
+  if (count > 0) return; // Categories already exist
+
+  const defaultCategories: CategoryInsert[] = [
+    { name: 'Food', icon: '🍔', color: '#FF6B6B', type: 'expense' },
+    { name: 'Transport', icon: '🚗', color: '#4ECDC4', type: 'expense' },
+    { name: 'Shopping', icon: '🛍️', color: '#45B7D1', type: 'expense' },
+    { name: 'Entertainment', icon: '🎬', color: '#96CEB4', type: 'expense' },
+    { name: 'Bills', icon: '📄', color: '#F7DC6F', type: 'expense' },
+    { name: 'Healthcare', icon: '🏥', color: '#BB8FCE', type: 'expense' },
+    { name: 'Salary', icon: '💰', color: '#58D68D', type: 'income' },
+    { name: 'Freelance', icon: '💼', color: '#5DADE2', type: 'income' },
+  ];
+
+  defaultCategories.forEach(category => {
+    createCategory(category);
+  });
+
+  console.log('Default categories seeded');
+};

@@ -3,7 +3,6 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Theme = 'light' | 'dark' | 'system';
-type Currency = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'BDT' | 'INR' | 'CAD' | 'AUD';
 type DateFormat = 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
 
 interface NotificationPreferences {
@@ -27,7 +26,7 @@ interface DataSettings {
 interface SettingsState {
   // State
   theme: Theme;
-  currency: Currency;
+  currency: string;
   dateFormat: DateFormat;
   notifications: NotificationPreferences;
   dataSettings: DataSettings;
@@ -37,7 +36,7 @@ interface SettingsState {
 
   // Actions
   setTheme: (theme: Theme) => void;
-  setCurrency: (currency: Currency) => void;
+  setCurrency: (currency: string) => void;
   setDateFormat: (format: DateFormat) => void;
   setLanguage: (language: string) => void;
   updateNotifications: (preferences: Partial<NotificationPreferences>) => void;

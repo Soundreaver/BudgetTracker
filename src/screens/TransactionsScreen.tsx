@@ -25,8 +25,9 @@ import {
   CustomButton,
   EmptyState,
 } from '@/components/ui';
-import { useTransactionStore } from '@/store';
-import { getAllCategories } from '@/services/categoryService';
+import { useTransactionStore, useSettingsStore } from '@/store';
+import { getAllCategories, getCategoryById } from '@/services/categoryService';
+import { getCurrencyByCode, formatCurrency } from '@/utils/currency';
 import type { Transaction, Category } from '@/types/database';
 
 type FilterType = 'all' | 'income' | 'expense';
@@ -44,7 +45,7 @@ export const TransactionsScreen: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [categories, setCategories] = useState<Category[]>([]);
-  
+
   // Add transaction form state
   const [amount, setAmount] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -62,10 +63,11 @@ export const TransactionsScreen: React.FC = () => {
     setSearchQuery,
     addTransaction,
   } = useTransactionStore();
+  const { currency: currencyCode } = useSettingsStore();
 
   useEffect(() => {
     loadTransactions();
-    
+
     // Load categories
     const loadedCategories = getAllCategories();
     setCategories(loadedCategories);
@@ -98,7 +100,7 @@ export const TransactionsScreen: React.FC = () => {
     }
 
     await triggerHaptic('success');
-    
+
     addTransaction({
       category_id: selectedCategory || 1, // Default category if none selected
       amount: parseFloat(amount),
@@ -124,7 +126,7 @@ export const TransactionsScreen: React.FC = () => {
   const groupTransactionsByDate = (transactions: Transaction[]): GroupedTransaction[] => {
     const groups: { [key: string]: Transaction[] } = {};
 
-    transactions.forEach((transaction) => {
+    transactions.forEach(transaction => {
       const date = transaction.date;
       if (!groups[date]) {
         groups[date] = [];
@@ -134,7 +136,7 @@ export const TransactionsScreen: React.FC = () => {
 
     return Object.keys(groups)
       .sort((a, b) => b.localeCompare(a))
-      .map((date) => ({
+      .map(date => ({
         title: format(parseISO(date), 'EEEE, MMMM dd'),
         data: groups[date],
       }));
@@ -149,29 +151,37 @@ export const TransactionsScreen: React.FC = () => {
     </View>
   );
 
-  const renderTransaction = ({ item }: { item: Transaction }) => (
-    <TransactionCard
-      id={item.id}
-      amount={item.amount}
-      description={item.description}
-      category={{
-        name: 'Category',
-        icon: '💰',
-        color: colors.primary[500],
-      }}
-      date={item.date}
-      type={item.type}
-      onPress={() => console.log('View transaction')}
-      onEdit={(id) => console.log('Edit', id)}
-      onDelete={(id) => console.log('Delete', id)}
-    />
-  );
+  const handleDeleteTransaction = (id: number) => {
+    console.log('Deleting transaction:', id);
+    const { removeTransaction } = useTransactionStore.getState();
+    removeTransaction(id);
+    console.log('Delete called');
+  };
+
+  const renderTransaction = ({ item }: { item: Transaction }) => {
+    const category = getCategoryById(item.category_id);
+    
+    return (
+      <TransactionCard
+        id={item.id}
+        amount={item.amount}
+        description={item.description}
+        category={{
+          name: category?.name || 'Category',
+          icon: category?.icon || '💰',
+          color: category?.color || colors.primary[500],
+        }}
+        date={item.date}
+        type={item.type}
+        onPress={() => console.log('View transaction')}
+        onEdit={(id) => console.log('Edit', id)}
+        onDelete={handleDeleteTransaction}
+      />
+    );
+  };
 
   const renderEmptyList = () => (
-    <EmptyState
-      variant="transactions"
-      onAction={() => setShowAddModal(true)}
-    />
+    <EmptyState variant="transactions" onAction={() => setShowAddModal(true)} />
   );
 
   return (
@@ -185,9 +195,7 @@ export const TransactionsScreen: React.FC = () => {
       >
         <View style={styles.headerTop}>
           <TouchableOpacity style={styles.monthSelector}>
-            <Text style={styles.monthText}>
-              {format(selectedMonth, 'MMMM yyyy')}
-            </Text>
+            <Text style={styles.monthText}>{format(selectedMonth, 'MMMM yyyy')}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
@@ -195,10 +203,7 @@ export const TransactionsScreen: React.FC = () => {
             <TouchableOpacity onPress={handleSearchToggle} style={styles.searchButton}>
               <Ionicons name="search-outline" size={22} color={colors.neutral[700]} />
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowFilterModal(true)}
-              style={styles.filterButton}
-            >
+            <TouchableOpacity onPress={() => setShowFilterModal(true)} style={styles.filterButton}>
               <Ionicons name="filter-outline" size={22} color={colors.neutral[700]} />
               {activeFilter !== 'all' && (
                 <View style={styles.filterBadge}>
@@ -238,21 +243,21 @@ export const TransactionsScreen: React.FC = () => {
         <View style={styles.summaryItem}>
           <Text style={styles.summaryLabel}>Income</Text>
           <Text style={[styles.summaryValue, { color: colors.success[500] }]}>
-            ${totals.income.toFixed(2)}
+            {formatCurrency(totals.income, currencyCode)}
           </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
           <Text style={styles.summaryLabel}>Expenses</Text>
           <Text style={[styles.summaryValue, { color: colors.error[500] }]}>
-            ${totals.expenses.toFixed(2)}
+            {formatCurrency(totals.expenses, currencyCode)}
           </Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
           <Text style={styles.summaryLabel}>Net</Text>
           <Text style={[styles.summaryValue, { color: colors.primary[500] }]}>
-            ${totals.balance.toFixed(2)}
+            {formatCurrency(totals.balance, currencyCode)}
           </Text>
         </View>
       </MotiView>
@@ -270,10 +275,7 @@ export const TransactionsScreen: React.FC = () => {
           renderItem={({ item }) => (
             <TouchableOpacity
               onPress={() => handleFilterChange(item.key as FilterType)}
-              style={[
-                styles.filterChip,
-                activeFilter === item.key && styles.filterChipActive,
-              ]}
+              style={[styles.filterChip, activeFilter === item.key && styles.filterChipActive]}
             >
               <Text
                 style={[
@@ -294,7 +296,7 @@ export const TransactionsScreen: React.FC = () => {
         sections={groupedTransactions}
         renderItem={renderTransaction}
         renderSectionHeader={renderSectionHeader}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled
         refreshControl={
@@ -315,7 +317,12 @@ export const TransactionsScreen: React.FC = () => {
         style={styles.fabContainer}
       >
         <TouchableOpacity
-          onPress={() => setShowAddModal(true)}
+          onPress={() => {
+            // Reload categories when opening modal
+            const loadedCategories = getAllCategories();
+            setCategories(loadedCategories);
+            setShowAddModal(true);
+          }}
           activeOpacity={0.8}
           style={[styles.fab, shadows.xl]}
         >
@@ -333,10 +340,7 @@ export const TransactionsScreen: React.FC = () => {
         <View style={styles.typeSelector}>
           <TouchableOpacity
             onPress={() => setTransactionType('expense')}
-            style={[
-              styles.typeButton,
-              transactionType === 'expense' && styles.typeButtonActive,
-            ]}
+            style={[styles.typeButton, transactionType === 'expense' && styles.typeButtonActive]}
           >
             <Text
               style={[
@@ -349,10 +353,7 @@ export const TransactionsScreen: React.FC = () => {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setTransactionType('income')}
-            style={[
-              styles.typeButton,
-              transactionType === 'income' && styles.typeButtonActive,
-            ]}
+            style={[styles.typeButton, transactionType === 'income' && styles.typeButtonActive]}
           >
             <Text
               style={[
@@ -368,7 +369,6 @@ export const TransactionsScreen: React.FC = () => {
         <AmountInput
           value={amount}
           onChangeValue={setAmount}
-          currency="$"
           label="Amount"
           suggestedAmounts={[10, 25, 50, 100, 200]}
         />
@@ -379,34 +379,42 @@ export const TransactionsScreen: React.FC = () => {
             <CategoryPicker
               categories={categories}
               selectedId={selectedCategory || undefined}
-              onSelect={(cat) => setSelectedCategory(cat.id)}
+              onSelect={cat => setSelectedCategory(cat.id)}
               columns={4}
             />
           ) : (
-            <Text style={styles.noCategoriesText}>No categories available. Please add categories first.</Text>
+            <Text style={styles.noCategoriesText}>
+              No categories available. Please add categories first.
+            </Text>
           )}
         </View>
 
-        <DateTimePicker
-          value={selectedDate}
-          onChange={setSelectedDate}
-          mode="date"
-          label="Date"
-        />
+        <View style={{ marginTop: spacing.md }}>
+          <DateTimePicker
+            value={selectedDate}
+            onChange={setSelectedDate}
+            mode="date"
+            label="Date"
+          />
+        </View>
 
-        <CustomInput
-          label="Description"
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Enter description..."
-        />
+        <View style={{ marginTop: spacing.md }}>
+          <CustomInput
+            label="Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Enter description..."
+          />
+        </View>
 
-        <CustomInput
-          label="Payment Method"
-          value={paymentMethod}
-          onChangeText={setPaymentMethod}
-          placeholder="Cash, Card, etc."
-        />
+        <View style={{ marginTop: spacing.md }}>
+          <CustomInput
+            label="Payment Method"
+            value={paymentMethod}
+            onChangeText={setPaymentMethod}
+            placeholder="Cash, Card, etc."
+          />
+        </View>
 
         <TouchableOpacity
           onPress={() => setIsRecurring(!isRecurring)}
