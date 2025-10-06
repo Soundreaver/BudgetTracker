@@ -8,9 +8,14 @@ A comprehensive React Native budget tracking application built with Expo, design
 
 ## 📸 Screenshots
 
-![Dashboard](screenshots/dashboard.png)
+<!-- ![Dashboard](screenshots/dashboard.png)
 ![Transactions](screenshots/transactions.png)
-![Budget Overview](screenshots/budget.png)
+![Budget Overview](screenshots/budget.png) -->
+<p align="center">
+  <img src="screenshots/home.png" alt="Home Screen" width="250" />
+  <img src="screenshots/expenses.png" alt="Expenses Screen" width="250" />
+  <img src="screenshots/stats.png" alt="Stats Screen" width="250" />
+</p>
 
 ## ✨ Features
 
@@ -47,7 +52,8 @@ Before you begin, ensure you have the following installed:
 - **npm** or **pnpm** - Comes with Node.js
 - **Expo CLI** - Will be installed via npx
 - **Git** - [Download](https://git-scm.com/)
-<!-- 
+<!--
+
 ### For Mobile Development
 
 - **Android Studio** (for Android development) - [Download](https://developer.android.com/studio)
@@ -71,11 +77,13 @@ cd budget-tracker
 ### 2. Install Dependencies
 
 Using npm:
+
 ```bash
 npm install
 ```
 
 Or using pnpm:
+
 ```bash
 pnpm install
 ```
@@ -114,16 +122,19 @@ This will start the Expo development server and display a QR code.
 ### Run on Different Platforms
 
 **Android:**
+
 ```bash
 npm run android
 ```
 
 **iOS (macOS only):**
+
 ```bash
 npm run ios
 ```
 
 **Web:**
+
 ```bash
 npm run web
 ```
@@ -226,21 +237,25 @@ budget-tracker/
 ### Code Quality
 
 The project uses:
+
 - **ESLint** for code linting
 - **Prettier** for code formatting
 - **TypeScript** for type safety
 
 Run linting before committing:
+
 ```bash
 npm run lint
 ```
 
 Auto-fix issues:
+
 ```bash
 npm run lint:fix
 ```
 
 Format code:
+
 ```bash
 npm run format
 ```
@@ -248,6 +263,7 @@ npm run format
 ## 🗄️ Database
 
 The app uses **SQLite** for local data storage with the following main tables:
+
 - Transactions
 - Budgets
 - Categories
@@ -265,36 +281,42 @@ Data is stored locally on the device and persists across app restarts.
 ## 📱 Features Breakdown
 
 ### Dashboard
+
 - Quick overview of total balance
 - Recent transactions
 - Budget status
 - Upcoming bills and goals
 
 ### Transactions
+
 - Add/edit/delete transactions
 - Categorize income and expenses
 - Filter and search capabilities
 - Detailed transaction history
 
 ### Budget Management
+
 - Set monthly/weekly budgets per category
 - Track spending against budgets
 - Visual progress indicators
 - Budget alerts and notifications
 
 ### Statistics
+
 - Spending trends over time
 - Category-wise breakdown
 - Interactive charts and graphs
 - Export capabilities
 
 ### Savings Goals
+
 - Create multiple savings goals
 - Track progress visually
 - Set target amounts and deadlines
 - Celebrate achievements
 
 ### Settings
+
 - Theme customization
 - Currency settings
 - Notification preferences
@@ -314,6 +336,7 @@ Contributions are welcome! Please follow these steps:
 ### Commit Message Convention
 
 Follow conventional commits:
+
 - `feat:` - New feature
 - `fix:` - Bug fix
 - `docs:` - Documentation changes
@@ -327,12 +350,14 @@ Follow conventional commits:
 ### Common Issues
 
 **1. Metro bundler not starting**
+
 ```bash
 # Clear cache and restart
 npx expo start -c
 ```
 
 **2. Dependencies issues**
+
 ```bash
 # Remove node_modules and reinstall
 rm -rf node_modules
@@ -340,6 +365,7 @@ npm install
 ```
 
 **3. Android build issues**
+
 ```bash
 # Clean Android build
 cd android
@@ -349,6 +375,7 @@ npm run android
 ```
 
 **4. iOS build issues (macOS)**
+
 ```bash
 # Clean iOS build
 cd ios
@@ -364,6 +391,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👨‍💻 Author
 
 **Soundreaver**
+
 - GitHub: [@Soundreaver](https://github.com/Soundreaver)
 - Repository: [BudgetTracker](https://github.com/Soundreaver/BudgetTracker)
 
@@ -377,6 +405,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📮 Support
 
 If you encounter any issues or have questions:
+
 1. Check the [Issues](https://github.com/Soundreaver/BudgetTracker/issues) page
 2. Create a new issue with detailed description
 3. Include screenshots and error logs when applicable
