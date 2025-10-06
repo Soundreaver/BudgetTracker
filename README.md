@@ -47,11 +47,11 @@ Before you begin, ensure you have the following installed:
 - **npm** or **pnpm** - Comes with Node.js
 - **Expo CLI** - Will be installed via npx
 - **Git** - [Download](https://git-scm.com/)
-
+<!-- 
 ### For Mobile Development
 
 - **Android Studio** (for Android development) - [Download](https://developer.android.com/studio)
-- **Xcode** (for iOS development, macOS only) - [Download](https://developer.apple.com/xcode/)
+- **Xcode** (for iOS development, macOS only) - [Download](https://developer.apple.com/xcode/) -->
 
 ### For Testing
 
