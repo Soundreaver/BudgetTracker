@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,22 @@ import {
   ScrollView,
   TouchableOpacity,
   Share,
+  Dimensions,
 } from 'react-native';
 import { MotiView } from 'moti';
-import { format, subDays, subMonths } from 'date-fns';
+import { 
+  format, 
+  subDays, 
+  subMonths, 
+  subWeeks, 
+  subYears,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+} from 'date-fns';
 import { triggerHaptic } from '@/utils/haptics';
 import { colors, spacing, borderRadius, typography, shadows } from '@/constants/theme';
 import {
@@ -16,9 +29,10 @@ import {
   StatCard,
   ProgressBar,
   CustomButton,
-  CategoryBadge,
+  EmptyState,
 } from '@/components/ui';
 import { useTransactionStore } from '@/store';
+import { getAllCategories } from '@/services/categoryService';
 
 type Period = 'week' | 'month' | 'year' | 'custom';
 
@@ -29,24 +43,166 @@ interface CategoryStat {
   color: string;
   amount: number;
   percentage: number;
-  change: number; // Comparison to last period
+  change: number;
+  transactionCount: number;
 }
 
 export const StatisticsScreen: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<Period>('month');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState<Date>(subMonths(new Date(), 1));
+  const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
 
-  const { getTotals } = useTransactionStore();
-  const totals = getTotals();
+  const { transactions, loadTransactions } = useTransactionStore();
 
-  // Mock data - would be calculated from transactions
-  const categoryStats: CategoryStat[] = [
-    { id: 1, name: 'Food', icon: '🍔', color: '#FF6B6B', amount: 450, percentage: 35, change: 12 },
-    { id: 2, name: 'Transport', icon: '🚗', color: '#4ECDC4', amount: 280, percentage: 22, change: -5 },
-    { id: 3, name: 'Shopping', icon: '🛍️', color: '#45B7D1', amount: 320, percentage: 25, change: 8 },
-    { id: 4, name: 'Entertainment', icon: '🎮', color: '#96CEB4', amount: 150, percentage: 12, change: -3 },
-    { id: 5, name: 'Bills', icon: '📱', color: '#FFEAA7', amount: 80, percentage: 6, change: 0 },
-  ];
+  useEffect(() => {
+    loadTransactions();
+  }, []);
+
+  // Calculate date range based on selected period
+  const { startDate, endDate, prevStartDate, prevEndDate } = useMemo(() => {
+    const now = new Date();
+    let start: Date, end: Date, prevStart: Date, prevEnd: Date;
+
+    switch (selectedPeriod) {
+      case 'week':
+        start = startOfWeek(now);
+        end = endOfWeek(now);
+        prevStart = startOfWeek(subWeeks(now, 1));
+        prevEnd = endOfWeek(subWeeks(now, 1));
+        break;
+      case 'year':
+        start = startOfYear(now);
+        end = endOfYear(now);
+        prevStart = startOfYear(subYears(now, 1));
+        prevEnd = endOfYear(subYears(now, 1));
+        break;
+      case 'custom':
+        start = customStartDate;
+        end = customEndDate;
+        const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        prevEnd = subDays(start, 1);
+        prevStart = subDays(prevEnd, daysDiff);
+        break;
+      default: // month
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        prevStart = startOfMonth(subMonths(now, 1));
+        prevEnd = endOfMonth(subMonths(now, 1));
+    }
+
+    return {
+      startDate: format(start, 'yyyy-MM-dd'),
+      endDate: format(end, 'yyyy-MM-dd'),
+      prevStartDate: format(prevStart, 'yyyy-MM-dd'),
+      prevEndDate: format(prevEnd, 'yyyy-MM-dd'),
+    };
+  }, [selectedPeriod, customStartDate, customEndDate]);
+
+  // Filter transactions for current and previous period
+  const currentTransactions = useMemo(() => 
+    transactions.filter(t => 
+      t.type === 'expense' && 
+      t.date >= startDate && 
+      t.date <= endDate
+    ),
+    [transactions, startDate, endDate]
+  );
+
+  const previousTransactions = useMemo(() =>
+    transactions.filter(t =>
+      t.type === 'expense' &&
+      t.date >= prevStartDate &&
+      t.date <= prevEndDate
+    ),
+    [transactions, prevStartDate, prevEndDate]
+  );
+
+  // Calculate category statistics
+  const categoryStats: CategoryStat[] = useMemo(() => {
+    const categories = getAllCategories().filter(c => c.type === 'expense');
+    const totalExpenses = currentTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    const stats = categories.map(category => {
+      const categoryTransactions = currentTransactions.filter(t => t.category_id === category.id);
+      const prevCategoryTransactions = previousTransactions.filter(t => t.category_id === category.id);
+      
+      const amount = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+      const prevAmount = prevCategoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+      
+      const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0;
+      const change = prevAmount > 0 ? ((amount - prevAmount) / prevAmount) * 100 : (amount > 0 ? 100 : 0);
+
+      return {
+        id: category.id,
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+        amount,
+        percentage,
+        change: Math.round(change),
+        transactionCount: categoryTransactions.length,
+      };
+    });
+
+    return stats
+      .filter(s => s.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+  }, [currentTransactions, previousTransactions]);
+
+  // Calculate totals
+  const totals = useMemo(() => {
+    const expenses = currentTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const income = transactions
+      .filter(t => t.type === 'income' && t.date >= startDate && t.date <= endDate)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    return {
+      expenses,
+      income,
+      balance: income - expenses,
+    };
+  }, [currentTransactions, transactions, startDate, endDate]);
+
+  // Calculate insights
+  const biggestExpense = categoryStats.length > 0 
+    ? categoryStats.reduce((max, cat) => cat.amount > max.amount ? cat : max, categoryStats[0])
+    : null;
+
+  const mostFrequentCategory = categoryStats.length > 0
+    ? categoryStats.reduce((max, cat) => cat.transactionCount > max.transactionCount ? cat : max, categoryStats[0])
+    : null;
+
+  const daysDiff = useMemo(() => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  }, [startDate, endDate]);
+
+  const averageDailySpending = totals.expenses / daysDiff;
+
+  const spendingTrend = useMemo(() => {
+    const prevExpenses = previousTransactions.reduce((sum, t) => sum + t.amount, 0);
+    if (prevExpenses === 0) return totals.expenses > 0 ? 100 : 0;
+    return ((totals.expenses - prevExpenses) / prevExpenses) * 100;
+  }, [totals.expenses, previousTransactions]);
+
+  // Smart recommendation
+  const recommendation = useMemo(() => {
+    if (categoryStats.length === 0) return null;
+    
+    const increasedCategories = categoryStats.filter(c => c.change > 10);
+    if (increasedCategories.length > 0) {
+      const topIncrease = increasedCategories[0];
+      return `Your ${topIncrease.name.toLowerCase()} expenses increased by ${topIncrease.change}% this period. Consider reviewing this category to reduce costs.`;
+    }
+    
+    if (biggestExpense && biggestExpense.percentage > 40) {
+      return `${biggestExpense.name} makes up ${Math.round(biggestExpense.percentage)}% of your spending. Consider setting a budget to manage this category better.`;
+    }
+    
+    return 'Great job! Your spending is well distributed across categories.';
+  }, [categoryStats, biggestExpense]);
 
   const handlePeriodChange = async (period: Period) => {
     await triggerHaptic('selection');
@@ -55,36 +211,25 @@ export const StatisticsScreen: React.FC = () => {
 
   const handleExportCSV = async () => {
     await triggerHaptic('medium');
-    // Would implement CSV export
-    console.log('Export CSV');
+    console.log('Export CSV - to be implemented');
   };
 
   const handleExportPDF = async () => {
     await triggerHaptic('medium');
-    // Would implement PDF export
-    console.log('Export PDF');
+    console.log('Export PDF - to be implemented');
   };
 
   const handleShare = async () => {
     await triggerHaptic('light');
     try {
+      const periodName = selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1);
       await Share.share({
-        message: `My spending summary: Income $${totals.income.toFixed(2)}, Expenses $${totals.expenses.toFixed(2)}, Net $${totals.balance.toFixed(2)}`,
+        message: `${periodName} Financial Summary:\n\nIncome: $${totals.income.toFixed(2)}\nExpenses: $${totals.expenses.toFixed(2)}\nBalance: $${totals.balance.toFixed(2)}\n\nGenerated by Budget Tracker`,
       });
     } catch (error) {
       console.error('Share error:', error);
     }
   };
-
-  const biggestExpense = categoryStats.reduce((max, cat) => 
-    cat.amount > max.amount ? cat : max
-  , categoryStats[0]);
-
-  const mostFrequentCategory = categoryStats[0]; // Would calculate from transaction count
-
-  const averageDailySpending = totals.expenses / 30; // Assuming monthly period
-
-  const spendingTrend = 12; // Would calculate percentage change from last period
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -128,7 +273,7 @@ export const StatisticsScreen: React.FC = () => {
               style={styles.dateRangePicker}
             >
               <Text style={styles.dateRangeText}>
-                {format(subMonths(new Date(), 1), 'MMM dd')} - {format(new Date(), 'MMM dd, yyyy')}
+                {format(customStartDate, 'MMM dd')} - {format(customEndDate, 'MMM dd, yyyy')}
               </Text>
               <Text style={styles.calendarIcon}>📅</Text>
             </TouchableOpacity>
@@ -136,226 +281,221 @@ export const StatisticsScreen: React.FC = () => {
         )}
       </MotiView>
 
-      {/* Visual Charts Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Overview</Text>
-        
-        {/* Spending Trend Line Chart */}
-        <ChartCard
-          title="Spending Trend"
-          period={selectedPeriod === 'custom' ? 'month' : selectedPeriod}
-          onPeriodChange={(p) => handlePeriodChange(p as Period)}
-        >
-          <MotiView
-            from={{ opacity: 0, translateY: 20 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500 }}
-            style={styles.chartPlaceholder}
-          >
-            <Text style={styles.chartLabel}>📈 Line Chart</Text>
-            <Text style={styles.chartSubtext}>Interactive chart would render here</Text>
-          </MotiView>
-        </ChartCard>
-
-        {/* Category Breakdown Pie Chart */}
-        <ChartCard title="Category Breakdown">
-          <MotiView
-            from={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', damping: 15, delay: 200 }}
-            style={styles.chartPlaceholder}
-          >
-            <Text style={styles.chartLabel}>🍩 Donut Chart</Text>
-            <Text style={styles.chartSubtext}>Tap segments for details</Text>
-          </MotiView>
-        </ChartCard>
-
-        {/* Income vs Expense Bar Chart */}
-        <ChartCard title="Income vs Expenses">
-          <MotiView
-            from={{ opacity: 0, translateX: -20 }}
-            animate={{ opacity: 1, translateX: 0 }}
-            transition={{ type: 'timing', duration: 500, delay: 300 }}
-            style={styles.chartPlaceholder}
-          >
-            <Text style={styles.chartLabel}>📊 Bar Chart</Text>
-            <Text style={styles.chartSubtext}>Monthly comparison</Text>
-          </MotiView>
-        </ChartCard>
-
-        {/* Daily Spending Heatmap */}
-        <ChartCard title="Daily Spending Heatmap">
-          <MotiView
-            from={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ type: 'timing', duration: 600, delay: 400 }}
-            style={styles.chartPlaceholder}
-          >
-            <Text style={styles.chartLabel}>🔥 Heatmap</Text>
-            <Text style={styles.chartSubtext}>Intensity by day</Text>
-          </MotiView>
-        </ChartCard>
-      </View>
-
-      {/* Insights Cards */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Key Insights</Text>
-        
-        <View style={styles.insightsGrid}>
-          <StatCard
-            title="Biggest Expense"
-            value={`$${biggestExpense.amount}`}
-            icon={<Text style={styles.insightIcon}>{biggestExpense.icon}</Text>}
-            subtitle={biggestExpense.name}
-            variant="error"
-            delay={0}
-          />
-          
-          <StatCard
-            title="Most Frequent"
-            value={mostFrequentCategory.name}
-            icon={<Text style={styles.insightIcon}>{mostFrequentCategory.icon}</Text>}
-            subtitle="15 transactions"
-            variant="primary"
-            delay={100}
-          />
-          
-          <StatCard
-            title="Daily Average"
-            value={`$${averageDailySpending.toFixed(2)}`}
-            icon={<Text style={styles.insightIcon}>💰</Text>}
-            subtitle="per day"
-            variant="warning"
-            delay={200}
-          />
-          
-          <StatCard
-            title="Spending Trend"
-            value={`${spendingTrend > 0 ? '+' : ''}${spendingTrend}%`}
-            trend={{ value: Math.abs(spendingTrend), isPositive: spendingTrend < 0 }}
-            icon={<Text style={styles.insightIcon}>📈</Text>}
-            subtitle="vs last period"
-            variant={spendingTrend > 0 ? 'error' : 'success'}
-            delay={300}
+      {currentTransactions.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <EmptyState
+            icon="📊"
+            title="No Data Available"
+            message={`No transactions found for this ${selectedPeriod}. Add some transactions to see statistics.`}
           />
         </View>
-
-        {/* Recommendation Card */}
-        <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 300, delay: 400 }}
-          style={[styles.recommendationCard, shadows.md]}
-        >
-          <View style={styles.recommendationHeader}>
-            <Text style={styles.recommendationIcon}>💡</Text>
-            <Text style={styles.recommendationTitle}>Smart Recommendation</Text>
-          </View>
-          <Text style={styles.recommendationText}>
-            Your food expenses increased by 12% this month. Consider meal planning to reduce costs.
-          </Text>
-        </MotiView>
-      </View>
-
-      {/* Category Breakdown List */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Category Breakdown</Text>
-        
-        {categoryStats.map((category, index) => (
-          <MotiView
-            key={category.id}
-            from={{ opacity: 0, translateX: -20 }}
-            animate={{ opacity: 1, translateX: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: index * 100 }}
-            style={styles.categoryItem}
-          >
-            <View style={styles.categoryHeader}>
-              <View style={styles.categoryInfo}>
-                <View
-                  style={[
-                    styles.categoryIconContainer,
-                    { backgroundColor: `${category.color}20` },
-                  ]}
-                >
-                  <Text style={styles.categoryIcon}>{category.icon}</Text>
-                </View>
-                <View style={styles.categoryDetails}>
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                  <View style={styles.categoryMeta}>
-                    <Text style={styles.categoryPercentage}>{category.percentage}%</Text>
-                    <Text style={styles.categoryAmount}>${category.amount}</Text>
-                  </View>
-                </View>
+      ) : (
+        <>
+          {/* Insights Cards */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Key Insights</Text>
+            
+            <View style={styles.insightsGrid}>
+              <View style={styles.cardWrapper}>
+                <StatCard
+                  title="Biggest Expense"
+                  value={biggestExpense ? `$${biggestExpense.amount.toFixed(2)}` : '$0.00'}
+                  icon={biggestExpense ? <Text style={styles.insightIcon}>{biggestExpense.icon}</Text> : <Text style={styles.insightIcon}>💸</Text>}
+                  subtitle={biggestExpense?.name || 'N/A'}
+                  variant="error"
+                  delay={0}
+                />
               </View>
               
-              <View
-                style={[
-                  styles.changeIndicator,
-                  { backgroundColor: category.change >= 0 ? colors.error[50] : colors.success[50] },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.changeText,
-                    { color: category.change >= 0 ? colors.error[700] : colors.success[700] },
-                  ]}
-                >
-                  {category.change >= 0 ? '+' : ''}{category.change}%
-                </Text>
+              <View style={styles.cardWrapper}>
+                <StatCard
+                  title="Most Frequent"
+                  value={mostFrequentCategory?.name || 'N/A'}
+                  icon={mostFrequentCategory ? <Text style={styles.insightIcon}>{mostFrequentCategory.icon}</Text> : <Text style={styles.insightIcon}>📝</Text>}
+                  subtitle={`${mostFrequentCategory?.transactionCount || 0} transactions`}
+                  variant="primary"
+                  delay={100}
+                />
+              </View>
+              
+              <View style={styles.cardWrapper}>
+                <StatCard
+                  title="Daily Average"
+                  value={`$${averageDailySpending.toFixed(2)}`}
+                  icon={<Text style={styles.insightIcon}>💰</Text>}
+                  subtitle="per day"
+                  variant="warning"
+                  delay={200}
+                />
+              </View>
+              
+              <View style={styles.cardWrapper}>
+                <StatCard
+                  title="Spending Trend"
+                  value={`${spendingTrend > 0 ? '+' : ''}${spendingTrend.toFixed(1)}%`}
+                  trend={{ value: Math.abs(spendingTrend), isPositive: spendingTrend < 0 }}
+                  icon={<Text style={styles.insightIcon}>📈</Text>}
+                  subtitle="vs last period"
+                  variant={spendingTrend > 0 ? 'error' : 'success'}
+                  delay={300}
+                />
               </View>
             </View>
-            
-            <ProgressBar
-              progress={category.percentage}
-              showPercentage={false}
-              height={8}
-              animated
-            />
-          </MotiView>
-        ))}
-      </View>
 
-      {/* Export Options */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Export & Share</Text>
-        
-        <MotiView
-          from={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', damping: 15, delay: 500 }}
-          style={styles.exportButtons}
-        >
-          <CustomButton
-            onPress={handleExportCSV}
-            variant="outline"
-            size="md"
-            icon={<Text style={styles.buttonIcon}>📄</Text>}
-            iconPosition="left"
-          >
-            Export CSV
-          </CustomButton>
-          
-          <CustomButton
-            onPress={handleExportPDF}
-            variant="outline"
-            size="md"
-            icon={<Text style={styles.buttonIcon}>📑</Text>}
-            iconPosition="left"
-          >
-            Generate PDF
-          </CustomButton>
-          
-          <CustomButton
-            onPress={handleShare}
-            variant="primary"
-            size="md"
-            icon={<Text style={styles.buttonIcon}>📤</Text>}
-            iconPosition="left"
-          >
-            Share Report
-          </CustomButton>
-        </MotiView>
-      </View>
+            {/* Recommendation Card */}
+            {recommendation && (
+              <MotiView
+                from={{ opacity: 0, translateY: 20 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 300, delay: 400 }}
+                style={[styles.recommendationCard, shadows.md]}
+              >
+                <View style={styles.recommendationHeader}>
+                  <Text style={styles.recommendationIcon}>💡</Text>
+                  <Text style={styles.recommendationTitle}>Smart Recommendation</Text>
+                </View>
+                <Text style={styles.recommendationText}>{recommendation}</Text>
+              </MotiView>
+            )}
+          </View>
+
+          {/* Visual Charts Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Overview</Text>
+            
+            {/* Spending Trend Line Chart */}
+            <ChartCard
+              title="Spending Trend"
+              period={selectedPeriod === 'custom' ? 'month' : selectedPeriod}
+              onPeriodChange={(p) => handlePeriodChange(p as Period)}
+            >
+              <MotiView
+                from={{ opacity: 0, translateY: 20 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 500 }}
+                style={styles.chartPlaceholder}
+              >
+                <Text style={styles.chartLabel}>📈</Text>
+                <Text style={styles.chartSubtext}>Chart visualization coming soon</Text>
+              </MotiView>
+            </ChartCard>
+
+            {/* Category Breakdown Pie Chart */}
+            <ChartCard title="Category Breakdown">
+              <MotiView
+                from={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', damping: 15, delay: 200 }}
+                style={styles.chartPlaceholder}
+              >
+                <Text style={styles.chartLabel}>🍩</Text>
+                <Text style={styles.chartSubtext}>Chart visualization coming soon</Text>
+              </MotiView>
+            </ChartCard>
+          </View>
+
+          {/* Category Breakdown List */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Category Breakdown</Text>
+            
+            {categoryStats.map((category, index) => (
+              <MotiView
+                key={category.id}
+                from={{ opacity: 0, translateX: -20 }}
+                animate={{ opacity: 1, translateX: 0 }}
+                transition={{ type: 'timing', duration: 300, delay: index * 50 }}
+                style={styles.categoryItem}
+              >
+                <View style={styles.categoryHeader}>
+                  <View style={styles.categoryInfo}>
+                    <View
+                      style={[
+                        styles.categoryIconContainer,
+                        { backgroundColor: `${category.color}20` },
+                      ]}
+                    >
+                      <Text style={styles.categoryIcon}>{category.icon}</Text>
+                    </View>
+                    <View style={styles.categoryDetails}>
+                      <Text style={styles.categoryName}>{category.name}</Text>
+                      <View style={styles.categoryMeta}>
+                        <Text style={styles.categoryPercentage}>{category.percentage.toFixed(1)}%</Text>
+                        <Text style={styles.categoryAmount}>${category.amount.toFixed(2)}</Text>
+                        <Text style={styles.categoryCount}>• {category.transactionCount} txns</Text>
+                      </View>
+                    </View>
+                  </View>
+                  
+                  <View
+                    style={[
+                      styles.changeIndicator,
+                      { backgroundColor: category.change >= 0 ? colors.error[50] : colors.success[50] },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.changeText,
+                        { color: category.change >= 0 ? colors.error[700] : colors.success[700] },
+                      ]}
+                    >
+                      {category.change >= 0 ? '+' : ''}{category.change}%
+                    </Text>
+                  </View>
+                </View>
+                
+                <ProgressBar
+                  progress={category.percentage}
+                  showPercentage={false}
+                  height={8}
+                  animated
+                />
+              </MotiView>
+            ))}
+          </View>
+
+          {/* Export Options */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Export & Share</Text>
+            
+            <MotiView
+              from={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', damping: 15, delay: 500 }}
+              style={styles.exportButtons}
+            >
+              <CustomButton
+                onPress={handleExportCSV}
+                variant="outline"
+                size="md"
+                icon={<Text style={styles.buttonIcon}>📄</Text>}
+                iconPosition="left"
+              >
+                Export CSV
+              </CustomButton>
+              
+              <CustomButton
+                onPress={handleExportPDF}
+                variant="outline"
+                size="md"
+                icon={<Text style={styles.buttonIcon}>📑</Text>}
+                iconPosition="left"
+              >
+                Generate PDF
+              </CustomButton>
+              
+              <CustomButton
+                onPress={handleShare}
+                variant="primary"
+                size="md"
+                icon={<Text style={styles.buttonIcon}>📤</Text>}
+                iconPosition="left"
+              >
+                Share Report
+              </CustomButton>
+            </MotiView>
+          </View>
+        </>
+      )}
 
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -393,6 +533,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.neutral[600],
     fontWeight: '500',
+    fontSize: 12,
   },
   periodTabTextActive: {
     color: colors.white,
@@ -413,6 +554,10 @@ const styles = StyleSheet.create({
   },
   calendarIcon: {
     fontSize: 20,
+  },
+  emptyContainer: {
+    padding: spacing.xl,
+    paddingTop: spacing['3xl'],
   },
   section: {
     padding: spacing.xl,
@@ -441,7 +586,11 @@ const styles = StyleSheet.create({
   insightsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
+    justifyContent: 'space-between',
+    rowGap: spacing.md,
+  },
+  cardWrapper: {
+    width: '48%',
   },
   insightIcon: {
     fontSize: 24,
@@ -509,7 +658,8 @@ const styles = StyleSheet.create({
   },
   categoryMeta: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   categoryPercentage: {
     ...typography.small,
@@ -520,10 +670,15 @@ const styles = StyleSheet.create({
     color: colors.neutral[900],
     fontWeight: '600',
   },
+  categoryCount: {
+    ...typography.small,
+    color: colors.neutral[500],
+  },
   changeIndicator: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.sm,
+    marginLeft: spacing.sm,
   },
   changeText: {
     ...typography.small,

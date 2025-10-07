@@ -13,3 +13,5 @@ export { CategoryBadge } from './CategoryBadge';
 export { ChartCard } from './ChartCard';
 export { BudgetProgressCard } from './BudgetProgressCard';
 export { EmptyState } from './EmptyState';
+export { AnimatedTextReveal, AnimatedTextRevealExamples } from './AnimatedTextReveal';
+export type { AnimationType } from './AnimatedTextReveal';

@@ -198,34 +198,42 @@ export const DashboardScreen: React.FC = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickStatsContainer}
           >
-            <StatCard
-              title="This Month's Income"
-              value={formatCurrency(totals.income, currencyCode)}
-              variant="success"
-              trend={{ value: 12, isPositive: true }}
-              delay={0}
-            />
-            <StatCard
-              title="This Month's Expenses"
-              value={formatCurrency(totals.expenses, currencyCode)}
-              variant="error"
-              trend={{ value: 8, isPositive: false }}
-              delay={100}
-            />
-            <StatCard
-              title="Savings Rate"
-              value={`${savingsRate.toFixed(1)}%`}
-              variant="primary"
-              subtitle="of income"
-              delay={200}
-            />
-            <StatCard
-              title="Top Category"
-              value="Food"
-              variant="warning"
-              subtitle="$234 spent"
-              delay={300}
-            />
+            <View style={styles.statCardWrapper}>
+              <StatCard
+                title="This Month's Income"
+                value={formatCurrency(totals.income, currencyCode)}
+                variant="success"
+                trend={{ value: 12, isPositive: true }}
+                delay={0}
+              />
+            </View>
+            <View style={styles.statCardWrapper}>
+              <StatCard
+                title="This Month's Expenses"
+                value={formatCurrency(totals.expenses, currencyCode)}
+                variant="error"
+                trend={{ value: 8, isPositive: false }}
+                delay={100}
+              />
+            </View>
+            <View style={styles.statCardWrapper}>
+              <StatCard
+                title="Savings Rate"
+                value={`${savingsRate.toFixed(1)}%`}
+                variant="primary"
+                subtitle="of income"
+                delay={200}
+              />
+            </View>
+            <View style={styles.statCardWrapper}>
+              <StatCard
+                title="Top Category"
+                value="Food"
+                variant="warning"
+                subtitle="$234 spent"
+                delay={300}
+              />
+            </View>
           </ScrollView>
         </View>
 
@@ -552,6 +560,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingRight: spacing.xl,
     flexDirection: 'row',
+  },
+  statCardWrapper: {
+    width: 180,
   },
   emptyTransactions: {
     alignItems: 'center',
