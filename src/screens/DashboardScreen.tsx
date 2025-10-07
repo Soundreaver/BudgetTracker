@@ -40,7 +40,7 @@ export const DashboardScreen: React.FC = () => {
   
   // Add transaction form state
   const [amount, setAmount] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -58,14 +58,20 @@ export const DashboardScreen: React.FC = () => {
   }, []);
 
   const loadData = async () => {
-    setIsLoading(true);
-    await Promise.all([loadActiveBudgets(), loadTransactions()]);
-    
-    // Load categories
-    const loadedCategories = getAllCategories();
-    setCategories(loadedCategories);
-    
-    setIsLoading(false);
+    try {
+      setIsLoading(true);
+      
+      // Load categories
+      const loadedCategories = await getAllCategories();
+      setCategories(loadedCategories);
+      
+      // Load budgets and transactions
+      await Promise.all([loadActiveBudgets(), loadTransactions()]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRefresh = async () => {
@@ -78,8 +84,12 @@ export const DashboardScreen: React.FC = () => {
     await triggerHaptic('medium');
     
     // Reload categories when opening modal
-    const loadedCategories = getAllCategories();
-    setCategories(loadedCategories);
+    try {
+      const loadedCategories = await getAllCategories();
+      setCategories(loadedCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
     
     setShowTransactionModal(true);
   };
@@ -90,27 +100,40 @@ export const DashboardScreen: React.FC = () => {
       return;
     }
 
-    await triggerHaptic('success');
-    
-    addTransaction({
-      category_id: selectedCategory || 1, // Default category if none selected
-      amount: parseFloat(amount),
-      description: description || 'No description',
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      type: transactionType,
-      payment_method: paymentMethod || 'cash',
-      is_recurring: isRecurring,
-      recurring_frequency: isRecurring ? 'monthly' : null,
-    });
+    if (!selectedCategory) {
+      alert('Please select a category');
+      return;
+    }
 
-    // Reset form
-    setAmount('');
-    setSelectedCategory(null);
-    setDescription('');
-    setPaymentMethod('');
-    setIsRecurring(false);
-    setTransactionType('expense');
-    setShowTransactionModal(false);
+    try {
+      await triggerHaptic('success');
+      
+      await addTransaction({
+        category_id: selectedCategory,
+        amount: parseFloat(amount),
+        description: description || 'No description',
+        date: format(selectedDate, 'yyyy-MM-dd'),
+        type: transactionType,
+        payment_method: paymentMethod || 'cash',
+        is_recurring: isRecurring,
+        recurring_frequency: isRecurring ? 'monthly' : null,
+      });
+
+      // Reset form
+      setAmount('');
+      setSelectedCategory(null);
+      setDescription('');
+      setPaymentMethod('');
+      setIsRecurring(false);
+      setTransactionType('expense');
+      setShowTransactionModal(false);
+      
+      // Reload data
+      await loadData();
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      alert('Failed to add transaction. Please try again.');
+    }
   };
 
   const totals = getTotals();

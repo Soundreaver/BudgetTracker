@@ -11,7 +11,7 @@ import {
 } from '@/services';
 
 interface BudgetAlert {
-  budgetId: number;
+  budgetId: string;
   budgetName: string;
   percentage: number;
   type: 'warning' | 'exceeded';
@@ -24,20 +24,20 @@ interface BudgetState {
   activeBudgets: Budget[];
   isLoading: boolean;
   alerts: BudgetAlert[];
-  selectedBudgetId: number | null;
+  selectedBudgetId: string | null;
 
   // Actions
-  loadBudgets: () => void;
-  loadActiveBudgets: () => void;
-  addBudget: (budget: Omit<Budget, 'id' | 'created_at'>) => void;
-  editBudget: (id: number, updates: Partial<Budget>) => void;
-  removeBudget: (id: number) => void;
-  selectBudget: (id: number | null) => void;
-  calculateBudgetSpending: (budgetId: number) => number;
-  calculateBudgetProgress: (budgetId: number) => number;
-  checkBudgetAlerts: () => void;
+  loadBudgets: () => Promise<void>;
+  loadActiveBudgets: () => Promise<void>;
+  addBudget: (budget: Omit<Budget, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  editBudget: (id: string, updates: Partial<Budget>) => Promise<void>;
+  removeBudget: (id: string) => Promise<void>;
+  selectBudget: (id: string | null) => void;
+  calculateBudgetSpending: (budget: Budget) => Promise<number>;
+  calculateBudgetProgress: (budgetId: string) => Promise<number>;
+  checkBudgetAlerts: () => Promise<void>;
   clearAlerts: () => void;
-  refreshBudgets: () => void;
+  refreshBudgets: () => Promise<void>;
 }
 
 export const useBudgetStore = create<BudgetState>()((set, get) => ({
@@ -49,57 +49,60 @@ export const useBudgetStore = create<BudgetState>()((set, get) => ({
   selectedBudgetId: null,
 
   // Actions
-  loadBudgets: () => {
+  loadBudgets: async () => {
     set({ isLoading: true });
     try {
-      const budgets = getAllBudgets();
+      const budgets = await getAllBudgets();
       set({ budgets, isLoading: false });
-      get().checkBudgetAlerts();
+      await get().checkBudgetAlerts();
     } catch (error) {
       console.error('Failed to load budgets:', error);
       set({ isLoading: false });
     }
   },
 
-  loadActiveBudgets: () => {
+  loadActiveBudgets: async () => {
     set({ isLoading: true });
     try {
-      const activeBudgets = getActiveBudgets();
+      const activeBudgets = await getActiveBudgets();
       set({ activeBudgets, isLoading: false });
-      get().checkBudgetAlerts();
+      await get().checkBudgetAlerts();
     } catch (error) {
       console.error('Failed to load active budgets:', error);
       set({ isLoading: false });
     }
   },
 
-  addBudget: (budget) => {
+  addBudget: async (budget) => {
     try {
-      createBudget(budget);
-      get().refreshBudgets();
+      await createBudget(budget);
+      await get().refreshBudgets();
     } catch (error) {
       console.error('Failed to create budget:', error);
+      throw error;
     }
   },
 
-  editBudget: (id, updates) => {
+  editBudget: async (id, updates) => {
     try {
-      updateBudget(id, updates);
-      get().refreshBudgets();
+      await updateBudget(id, updates);
+      await get().refreshBudgets();
     } catch (error) {
       console.error('Failed to update budget:', error);
+      throw error;
     }
   },
 
-  removeBudget: (id) => {
+  removeBudget: async (id) => {
     try {
-      deleteBudget(id);
-      get().refreshBudgets();
+      await deleteBudget(id);
+      await get().refreshBudgets();
       if (get().selectedBudgetId === id) {
         set({ selectedBudgetId: null });
       }
     } catch (error) {
       console.error('Failed to delete budget:', error);
+      throw error;
     }
   },
 
@@ -107,49 +110,53 @@ export const useBudgetStore = create<BudgetState>()((set, get) => ({
     set({ selectedBudgetId: id });
   },
 
-  calculateBudgetSpending: (budgetId) => {
+  calculateBudgetSpending: async (budget) => {
     try {
-      return getBudgetSpending(budgetId);
+      return await getBudgetSpending(budget);
     } catch (error) {
       console.error('Failed to calculate budget spending:', error);
       return 0;
     }
   },
 
-  calculateBudgetProgress: (budgetId) => {
+  calculateBudgetProgress: async (budgetId) => {
     try {
-      return getBudgetProgress(budgetId);
+      return await getBudgetProgress(budgetId);
     } catch (error) {
       console.error('Failed to calculate budget progress:', error);
       return 0;
     }
   },
 
-  checkBudgetAlerts: () => {
+  checkBudgetAlerts: async () => {
     const alerts: BudgetAlert[] = [];
     const { activeBudgets } = get();
 
-    activeBudgets.forEach((budget) => {
-      const progress = getBudgetProgress(budget.id);
+    for (const budget of activeBudgets) {
+      try {
+        const progress = await getBudgetProgress(budget.id);
 
-      if (progress >= 100) {
-        alerts.push({
-          budgetId: budget.id,
-          budgetName: `Budget ${budget.id}`,
-          percentage: progress,
-          type: 'exceeded',
-          message: `You've exceeded your budget by ${(progress - 100).toFixed(1)}%`,
-        });
-      } else if (progress >= 80) {
-        alerts.push({
-          budgetId: budget.id,
-          budgetName: `Budget ${budget.id}`,
-          percentage: progress,
-          type: 'warning',
-          message: `You've used ${progress.toFixed(1)}% of your budget`,
-        });
+        if (progress >= 100) {
+          alerts.push({
+            budgetId: budget.id,
+            budgetName: `Budget ${budget.id}`,
+            percentage: progress,
+            type: 'exceeded',
+            message: `You've exceeded your budget by ${(progress - 100).toFixed(1)}%`,
+          });
+        } else if (progress >= 80) {
+          alerts.push({
+            budgetId: budget.id,
+            budgetName: `Budget ${budget.id}`,
+            percentage: progress,
+            type: 'warning',
+            message: `You've used ${progress.toFixed(1)}% of your budget`,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to check budget alert:', error);
       }
-    });
+    }
 
     set({ alerts });
   },
@@ -158,8 +165,8 @@ export const useBudgetStore = create<BudgetState>()((set, get) => ({
     set({ alerts: [] });
   },
 
-  refreshBudgets: () => {
-    get().loadBudgets();
-    get().loadActiveBudgets();
+  refreshBudgets: async () => {
+    await get().loadBudgets();
+    await get().loadActiveBudgets();
   },
 }));

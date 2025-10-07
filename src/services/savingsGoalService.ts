@@ -1,150 +1,193 @@
-import { openDatabase } from './database';
+import { supabase } from './supabase';
 import type { SavingsGoal, SavingsGoalInsert, SavingsGoalUpdate } from '@/types/database';
 
-// Get all savings goals
-export const getAllSavingsGoals = (): SavingsGoal[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<SavingsGoal>(
-    'SELECT * FROM savings_goals ORDER BY created_at DESC'
-  );
-  return result;
+// Get all savings goals for the current user
+export const getAllSavingsGoals = async (): Promise<SavingsGoal[]> => {
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching savings goals:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get savings goal by ID
-export const getSavingsGoalById = (id: number): SavingsGoal | null => {
-  const db = openDatabase();
-  const result = db.getFirstSync<SavingsGoal>('SELECT * FROM savings_goals WHERE id = ?', [id]);
-  return result;
+export const getSavingsGoalById = async (id: string): Promise<SavingsGoal | null> => {
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching savings goal:', error);
+    return null;
+  }
+
+  return data;
 };
 
 // Get active savings goals (deadline not passed)
-export const getActiveSavingsGoals = (): SavingsGoal[] => {
-  const db = openDatabase();
+export const getActiveSavingsGoals = async (): Promise<SavingsGoal[]> => {
   const currentDate = new Date().toISOString();
-  const result = db.getAllSync<SavingsGoal>(
-    'SELECT * FROM savings_goals WHERE deadline >= ? ORDER BY deadline ASC',
-    [currentDate]
-  );
-  return result;
+  
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('*')
+    .gte('deadline', currentDate)
+    .order('deadline', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching active savings goals:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get completed savings goals (current_amount >= target_amount)
-export const getCompletedSavingsGoals = (): SavingsGoal[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<SavingsGoal>(
-    'SELECT * FROM savings_goals WHERE current_amount >= target_amount ORDER BY created_at DESC'
-  );
-  return result;
+export const getCompletedSavingsGoals = async (): Promise<SavingsGoal[]> => {
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching completed savings goals:', error);
+    throw error;
+  }
+
+  // Filter completed goals on client side (Supabase doesn't support column comparisons in filters easily)
+  return data?.filter(goal => goal.current_amount >= goal.target_amount) || [];
 };
 
 // Create new savings goal
-export const createSavingsGoal = (goal: SavingsGoalInsert): number => {
-  const db = openDatabase();
-  const result = db.runSync(
-    `INSERT INTO savings_goals (name, target_amount, current_amount, deadline, icon, color) 
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      goal.name,
-      goal.target_amount,
-      goal.current_amount ?? 0,
-      goal.deadline,
-      goal.icon,
-      goal.color,
-    ]
-  );
-  return result.lastInsertRowId;
+export const createSavingsGoal = async (goal: Omit<SavingsGoalInsert, 'user_id'>): Promise<string> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .insert({
+      ...goal,
+      user_id: user.id,
+      current_amount: goal.current_amount ?? 0,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating savings goal:', error);
+    throw error;
+  }
+
+  return data.id;
 };
 
 // Update savings goal
-export const updateSavingsGoal = (id: number, updates: SavingsGoalUpdate): void => {
-  const db = openDatabase();
-  const fields: string[] = [];
-  const values: any[] = [];
+export const updateSavingsGoal = async (id: string, updates: SavingsGoalUpdate): Promise<void> => {
+  const { error } = await supabase
+    .from('savings_goals')
+    .update(updates)
+    .eq('id', id);
 
-  if (updates.name !== undefined) {
-    fields.push('name = ?');
-    values.push(updates.name);
+  if (error) {
+    console.error('Error updating savings goal:', error);
+    throw error;
   }
-  if (updates.target_amount !== undefined) {
-    fields.push('target_amount = ?');
-    values.push(updates.target_amount);
-  }
-  if (updates.current_amount !== undefined) {
-    fields.push('current_amount = ?');
-    values.push(updates.current_amount);
-  }
-  if (updates.deadline !== undefined) {
-    fields.push('deadline = ?');
-    values.push(updates.deadline);
-  }
-  if (updates.icon !== undefined) {
-    fields.push('icon = ?');
-    values.push(updates.icon);
-  }
-  if (updates.color !== undefined) {
-    fields.push('color = ?');
-    values.push(updates.color);
-  }
-
-  if (fields.length === 0) return;
-
-  values.push(id);
-  db.runSync(`UPDATE savings_goals SET ${fields.join(', ')} WHERE id = ?`, values);
 };
 
 // Add amount to savings goal
-export const addToSavingsGoal = (id: number, amount: number): void => {
-  const db = openDatabase();
-  db.runSync('UPDATE savings_goals SET current_amount = current_amount + ? WHERE id = ?', [
-    amount,
-    id,
-  ]);
+export const addToSavingsGoal = async (id: string, amount: number): Promise<void> => {
+  const goal = await getSavingsGoalById(id);
+  if (!goal) {
+    throw new Error('Savings goal not found');
+  }
+
+  const { error } = await supabase
+    .from('savings_goals')
+    .update({ current_amount: goal.current_amount + amount })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error adding to savings goal:', error);
+    throw error;
+  }
 };
 
 // Subtract amount from savings goal
-export const subtractFromSavingsGoal = (id: number, amount: number): void => {
-  const db = openDatabase();
-  db.runSync(
-    'UPDATE savings_goals SET current_amount = MAX(0, current_amount - ?) WHERE id = ?',
-    [amount, id]
-  );
+export const subtractFromSavingsGoal = async (id: string, amount: number): Promise<void> => {
+  const goal = await getSavingsGoalById(id);
+  if (!goal) {
+    throw new Error('Savings goal not found');
+  }
+
+  const { error } = await supabase
+    .from('savings_goals')
+    .update({ current_amount: Math.max(0, goal.current_amount - amount) })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error subtracting from savings goal:', error);
+    throw error;
+  }
 };
 
 // Delete savings goal
-export const deleteSavingsGoal = (id: number): void => {
-  const db = openDatabase();
-  db.runSync('DELETE FROM savings_goals WHERE id = ?', [id]);
+export const deleteSavingsGoal = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('savings_goals')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting savings goal:', error);
+    throw error;
+  }
 };
 
 // Get savings goal progress (percentage)
-export const getSavingsGoalProgress = (id: number): number => {
-  const goal = getSavingsGoalById(id);
+export const getSavingsGoalProgress = async (id: string): Promise<number> => {
+  const goal = await getSavingsGoalById(id);
   if (!goal) return 0;
 
   return (goal.current_amount / goal.target_amount) * 100;
 };
 
 // Get remaining amount for savings goal
-export const getRemainingAmount = (id: number): number => {
-  const goal = getSavingsGoalById(id);
+export const getRemainingAmount = async (id: string): Promise<number> => {
+  const goal = await getSavingsGoalById(id);
   if (!goal) return 0;
 
   return Math.max(0, goal.target_amount - goal.current_amount);
 };
 
 // Check if savings goal is completed
-export const isSavingsGoalCompleted = (id: number): boolean => {
-  const goal = getSavingsGoalById(id);
+export const isSavingsGoalCompleted = async (id: string): Promise<boolean> => {
+  const goal = await getSavingsGoalById(id);
   if (!goal) return false;
 
   return goal.current_amount >= goal.target_amount;
 };
 
 // Get total savings across all goals
-export const getTotalSavings = (): number => {
-  const db = openDatabase();
-  const result = db.getFirstSync<{ total: number | null }>(
-    'SELECT SUM(current_amount) as total FROM savings_goals'
-  );
-  return result?.total ?? 0;
+export const getTotalSavings = async (): Promise<number> => {
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('current_amount');
+
+  if (error) {
+    console.error('Error getting total savings:', error);
+    return 0;
+  }
+
+  return data?.reduce((sum, goal) => sum + Number(goal.current_amount), 0) || 0;
 };

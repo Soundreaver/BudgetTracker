@@ -48,7 +48,7 @@ export const TransactionsScreen: React.FC = () => {
 
   // Add transaction form state
   const [amount, setAmount] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -66,12 +66,19 @@ export const TransactionsScreen: React.FC = () => {
   const { currency: currencyCode } = useSettingsStore();
 
   useEffect(() => {
-    loadTransactions();
-
-    // Load categories
-    const loadedCategories = getAllCategories();
-    setCategories(loadedCategories);
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      await loadTransactions();
+      // Load categories
+      const loadedCategories = await getAllCategories();
+      setCategories(loadedCategories);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -99,27 +106,37 @@ export const TransactionsScreen: React.FC = () => {
       return;
     }
 
-    await triggerHaptic('success');
+    if (!selectedCategory) {
+      alert('Please select a category');
+      return;
+    }
 
-    addTransaction({
-      category_id: selectedCategory || 1, // Default category if none selected
-      amount: parseFloat(amount),
-      description: description || 'No description',
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      type: transactionType,
-      payment_method: paymentMethod || 'cash',
-      is_recurring: isRecurring,
-      recurring_frequency: isRecurring ? 'monthly' : null,
-    });
+    try {
+      await triggerHaptic('success');
 
-    // Reset form
-    setAmount('');
-    setSelectedCategory(null);
-    setDescription('');
-    setPaymentMethod('');
-    setIsRecurring(false);
-    setTransactionType('expense');
-    setShowAddModal(false);
+      await addTransaction({
+        category_id: selectedCategory,
+        amount: parseFloat(amount),
+        description: description || 'No description',
+        date: format(selectedDate, 'yyyy-MM-dd'),
+        type: transactionType,
+        payment_method: paymentMethod || 'cash',
+        is_recurring: isRecurring,
+        recurring_frequency: isRecurring ? 'monthly' : null,
+      });
+
+      // Reset form
+      setAmount('');
+      setSelectedCategory(null);
+      setDescription('');
+      setPaymentMethod('');
+      setIsRecurring(false);
+      setTransactionType('expense');
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      alert('Failed to add transaction. Please try again.');
+    }
   };
 
   // Group transactions by date
@@ -151,15 +168,19 @@ export const TransactionsScreen: React.FC = () => {
     </View>
   );
 
-  const handleDeleteTransaction = (id: number) => {
-    console.log('Deleting transaction:', id);
-    const { removeTransaction } = useTransactionStore.getState();
-    removeTransaction(id);
-    console.log('Delete called');
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      const { removeTransaction } = useTransactionStore.getState();
+      await removeTransaction(id);
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Failed to delete transaction');
+    }
   };
 
   const renderTransaction = ({ item }: { item: Transaction }) => {
-    const category = getCategoryById(item.category_id);
+    // Get category synchronously from local state
+    const category = categories.find(c => c.id === item.category_id);
     
     return (
       <TransactionCard
@@ -296,7 +317,7 @@ export const TransactionsScreen: React.FC = () => {
         sections={groupedTransactions}
         renderItem={renderTransaction}
         renderSectionHeader={renderSectionHeader}
-        keyExtractor={item => item.id.toString()}
+        keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled
         refreshControl={
@@ -317,10 +338,14 @@ export const TransactionsScreen: React.FC = () => {
         style={styles.fabContainer}
       >
         <TouchableOpacity
-          onPress={() => {
+          onPress={async () => {
             // Reload categories when opening modal
-            const loadedCategories = getAllCategories();
-            setCategories(loadedCategories);
+            try {
+              const loadedCategories = await getAllCategories();
+              setCategories(loadedCategories);
+            } catch (error) {
+              console.error('Error loading categories:', error);
+            }
             setShowAddModal(true);
           }}
           activeOpacity={0.8}

@@ -19,7 +19,7 @@ type SortOrder = 'asc' | 'desc';
 
 interface TransactionFilters {
   type: TransactionType | 'all';
-  categoryId: number | null;
+  categoryId: string | null;
   startDate: string | null;
   endDate: string | null;
   minAmount: number | null;
@@ -35,15 +35,15 @@ interface TransactionState {
   sortBy: SortBy;
   sortOrder: SortOrder;
   filters: TransactionFilters;
-  selectedTransactionId: number | null;
+  selectedTransactionId: string | null;
 
   // Actions
-  loadTransactions: () => void;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => void;
-  checkBudgetThresholds: (transaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
-  editTransaction: (id: number, updates: Partial<Transaction>) => void;
-  removeTransaction: (id: number) => void;
-  selectTransaction: (id: number | null) => void;
+  loadTransactions: () => Promise<void>;
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  checkBudgetThresholds: (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  editTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
+  removeTransaction: (id: string) => Promise<void>;
+  selectTransaction: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
   setSortBy: (sortBy: SortBy) => void;
   setSortOrder: (order: SortOrder) => void;
@@ -77,10 +77,10 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
   selectedTransactionId: null,
 
   // Actions
-  loadTransactions: () => {
+  loadTransactions: async () => {
     set({ isLoading: true });
     try {
-      const transactions = getAllTransactions();
+      const transactions = await getAllTransactions();
       set({ transactions, isLoading: false });
       get().applyFiltersAndSearch();
     } catch (error) {
@@ -97,16 +97,17 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
         await get().checkBudgetThresholds(transaction);
       }
       
-      createTransaction(transaction);
-      get().refreshTransactions();
+      await createTransaction(transaction);
+      await get().refreshTransactions();
     } catch (error) {
       console.error('Failed to create transaction:', error);
+      throw error;
     }
   },
 
-  checkBudgetThresholds: async (newTransaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>) => {
+  checkBudgetThresholds: async (newTransaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
     try {
-      const budgets = getActiveBudgets();
+      const budgets = await getActiveBudgets();
       
       for (const budget of budgets) {
         // Check if this transaction affects this budget
@@ -115,7 +116,7 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
         if (!affectsBudget) continue;
         
         // Get current spending BEFORE this transaction
-        const currentSpent = getBudgetSpending(budget);
+        const currentSpent = await getBudgetSpending(budget);
         
         // Calculate what spending will be AFTER this transaction
         const totalSpent = currentSpent + newTransaction.amount;
@@ -135,7 +136,7 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
         // Get category name
         let categoryName = 'All Categories';
         if (budget.category_id !== null) {
-          const category = getCategoryById(budget.category_id);
+          const category = await getCategoryById(budget.category_id);
           categoryName = category?.name || 'Category';
         }
         
@@ -166,24 +167,26 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
     }
   },
 
-  editTransaction: (id, updates) => {
+  editTransaction: async (id, updates) => {
     try {
-      updateTransaction(id, updates);
-      get().refreshTransactions();
+      await updateTransaction(id, updates);
+      await get().refreshTransactions();
     } catch (error) {
       console.error('Failed to update transaction:', error);
+      throw error;
     }
   },
 
-  removeTransaction: (id) => {
+  removeTransaction: async (id) => {
     try {
-      deleteTransaction(id);
-      get().refreshTransactions();
+      await deleteTransaction(id);
+      await get().refreshTransactions();
       if (get().selectedTransactionId === id) {
         set({ selectedTransactionId: null });
       }
     } catch (error) {
       console.error('Failed to delete transaction:', error);
+      throw error;
     }
   },
 
@@ -271,7 +274,7 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
       } else if (sortBy === 'amount') {
         comparison = a.amount - b.amount;
       } else if (sortBy === 'category') {
-        comparison = a.category_id - b.category_id;
+        comparison = a.category_id.localeCompare(b.category_id);
       }
 
       return sortOrder === 'asc' ? comparison : -comparison;
@@ -280,10 +283,10 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
     set({ filteredTransactions: filtered });
   },
 
-  loadTransactionsByDateRange: (startDate, endDate) => {
+  loadTransactionsByDateRange: async (startDate, endDate) => {
     set({ isLoading: true });
     try {
-      const transactions = getTransactionsByDateRange(startDate, endDate);
+      const transactions = await getTransactionsByDateRange(startDate, endDate);
       set({ transactions, isLoading: false });
       get().applyFiltersAndSearch();
     } catch (error) {
@@ -293,15 +296,19 @@ export const useTransactionStore = create<TransactionState>()((set, get) => ({
   },
 
   getTotals: () => {
-    const { filters } = get();
-    const expenses = getTotalExpenses(filters.startDate ?? undefined, filters.endDate ?? undefined);
-    const income = getTotalIncome(filters.startDate ?? undefined, filters.endDate ?? undefined);
+    const { filteredTransactions } = get();
+    const expenses = filteredTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const income = filteredTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
     const balance = income - expenses;
 
     return { expenses, income, balance };
   },
 
-  refreshTransactions: () => {
-    get().loadTransactions();
+  refreshTransactions: async () => {
+    await get().loadTransactions();
   },
 }));

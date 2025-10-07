@@ -1,132 +1,163 @@
-import { openDatabase } from './database';
+import { supabase } from './supabase';
 import type { Budget, BudgetInsert } from '@/types/database';
 
-// Get all budgets
-export const getAllBudgets = (): Budget[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Budget>('SELECT * FROM budgets ORDER BY created_at DESC');
-  return result;
+// Get all budgets for the current user
+export const getAllBudgets = async (): Promise<Budget[]> => {
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching budgets:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get budget by ID
-export const getBudgetById = (id: number): Budget | null => {
-  const db = openDatabase();
-  const result = db.getFirstSync<Budget>('SELECT * FROM budgets WHERE id = ?', [id]);
-  return result;
+export const getBudgetById = async (id: string): Promise<Budget | null> => {
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching budget:', error);
+    return null;
+  }
+
+  return data;
 };
 
 // Get budgets by category
-export const getBudgetsByCategory = (categoryId: number): Budget[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Budget>(
-    'SELECT * FROM budgets WHERE category_id = ? ORDER BY created_at DESC',
-    [categoryId]
-  );
-  return result;
+export const getBudgetsByCategory = async (categoryId: string): Promise<Budget[]> => {
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('*')
+    .eq('category_id', categoryId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching budgets by category:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get active budgets (current date falls within start_date and end_date)
-export const getActiveBudgets = (): Budget[] => {
-  const db = openDatabase();
+export const getActiveBudgets = async (): Promise<Budget[]> => {
   const currentDate = new Date().toISOString();
-  const result = db.getAllSync<Budget>(
-    'SELECT * FROM budgets WHERE ? BETWEEN start_date AND end_date ORDER BY created_at DESC',
-    [currentDate]
-  );
-  return result;
+  
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('*')
+    .lte('start_date', currentDate)
+    .gte('end_date', currentDate)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching active budgets:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get budgets by period
-export const getBudgetsByPeriod = (period: 'weekly' | 'monthly' | 'yearly'): Budget[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Budget>(
-    'SELECT * FROM budgets WHERE period = ? ORDER BY created_at DESC',
-    [period]
-  );
-  return result;
+export const getBudgetsByPeriod = async (period: 'weekly' | 'monthly' | 'yearly'): Promise<Budget[]> => {
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('*')
+    .eq('period', period)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching budgets by period:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Create new budget
-export const createBudget = (budget: BudgetInsert): number => {
-  const db = openDatabase();
-  const result = db.runSync(
-    `INSERT INTO budgets (category_id, amount, period, start_date, end_date, alert_threshold) 
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      budget.category_id,
-      budget.amount,
-      budget.period,
-      budget.start_date,
-      budget.end_date,
-      budget.alert_threshold ?? 80
-    ]
-  );
-  return result.lastInsertRowId;
+export const createBudget = async (budget: Omit<BudgetInsert, 'user_id'>): Promise<string> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data, error } = await supabase
+    .from('budgets')
+    .insert({
+      ...budget,
+      user_id: user.id,
+      alert_threshold: budget.alert_threshold ?? 80,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating budget:', error);
+    throw error;
+  }
+
+  return data.id;
 };
 
 // Update budget
-export const updateBudget = (id: number, updates: Partial<BudgetInsert>): void => {
-  const db = openDatabase();
-  const fields: string[] = [];
-  const values: any[] = [];
+export const updateBudget = async (id: string, updates: Partial<Omit<BudgetInsert, 'user_id'>>): Promise<void> => {
+  const { error } = await supabase
+    .from('budgets')
+    .update(updates)
+    .eq('id', id);
 
-  if (updates.category_id !== undefined) {
-    fields.push('category_id = ?');
-    values.push(updates.category_id);
+  if (error) {
+    console.error('Error updating budget:', error);
+    throw error;
   }
-  if (updates.amount !== undefined) {
-    fields.push('amount = ?');
-    values.push(updates.amount);
-  }
-  if (updates.period !== undefined) {
-    fields.push('period = ?');
-    values.push(updates.period);
-  }
-  if (updates.start_date !== undefined) {
-    fields.push('start_date = ?');
-    values.push(updates.start_date);
-  }
-  if (updates.end_date !== undefined) {
-    fields.push('end_date = ?');
-    values.push(updates.end_date);
-  }
-  if (updates.alert_threshold !== undefined) {
-    fields.push('alert_threshold = ?');
-    values.push(updates.alert_threshold);
-  }
-
-  if (fields.length === 0) return;
-
-  values.push(id);
-  db.runSync(`UPDATE budgets SET ${fields.join(', ')} WHERE id = ?`, values);
 };
 
 // Delete budget
-export const deleteBudget = (id: number): void => {
-  const db = openDatabase();
-  db.runSync('DELETE FROM budgets WHERE id = ?', [id]);
+export const deleteBudget = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('budgets')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting budget:', error);
+    throw error;
+  }
 };
 
 // Get budget spending for a specific budget
-export const getBudgetSpending = (budget: Budget): number => {
-  const db = openDatabase();
-  
-  // Only count transactions created AFTER the budget was created
-  // This ensures budgets start fresh and don't count old transactions
-  let query = `SELECT SUM(amount) as total FROM transactions 
-               WHERE type = 'expense' 
-               AND date(date) >= date(?) 
-               AND date(date) <= date(?)
-               AND datetime(created_at) >= datetime(?)`;
-  const params: any[] = [budget.start_date, budget.end_date, budget.created_at];
+export const getBudgetSpending = async (budget: Budget): Promise<number> => {
+  let query = supabase
+    .from('transactions')
+    .select('amount')
+    .eq('type', 'expense')
+    .gte('date', budget.start_date)
+    .lte('date', budget.end_date)
+    .gte('created_at', budget.created_at);
 
   if (budget.category_id !== null) {
-    query += ` AND category_id = ?`;
-    params.push(budget.category_id);
+    query = query.eq('category_id', budget.category_id);
   }
 
-  const result = db.getFirstSync<{ total: number | null }>(query, params);
-  
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error getting budget spending:', error);
+    return 0;
+  }
+
+  const total = data?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
+
   // Debug logging
   console.log('Budget Spending Debug:', {
     budget_id: budget.id,
@@ -134,17 +165,17 @@ export const getBudgetSpending = (budget: Budget): number => {
     start_date: budget.start_date,
     end_date: budget.end_date,
     budget_created_at: budget.created_at,
-    total_spent: result?.total ?? 0,
+    total_spent: total,
   });
 
-  return result?.total ?? 0;
+  return total;
 };
 
 // Get budget progress (percentage)
-export const getBudgetProgress = (budgetId: number): number => {
-  const budget = getBudgetById(budgetId);
+export const getBudgetProgress = async (budgetId: string): Promise<number> => {
+  const budget = await getBudgetById(budgetId);
   if (!budget) return 0;
 
-  const spending = getBudgetSpending(budget);
+  const spending = await getBudgetSpending(budget);
   return (spending / budget.amount) * 100;
 };

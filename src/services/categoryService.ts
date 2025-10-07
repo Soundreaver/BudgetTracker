@@ -1,115 +1,125 @@
-import { openDatabase } from './database';
+import { supabase } from './supabase';
 import type { Category, CategoryInsert } from '@/types/database';
 
-// Get all categories
-export const getAllCategories = (): Category[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Category>('SELECT * FROM categories ORDER BY created_at DESC');
-  return result;
+// Get all categories for the current user
+export const getAllCategories = async (): Promise<Category[]> => {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching categories:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
-// Get categories by type
-export const getCategoriesByType = (type: 'expense' | 'income'): Category[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Category>(
-    'SELECT * FROM categories WHERE type = ? ORDER BY created_at DESC',
-    [type]
-  );
-  return result;
+// Get categories by type for the current user
+export const getCategoriesByType = async (type: 'expense' | 'income'): Promise<Category[]> => {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .eq('type', type)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching categories by type:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
-// Get category by ID
-export const getCategoryById = (id: number): Category | null => {
-  const db = openDatabase();
-  const result = db.getFirstSync<Category>('SELECT * FROM categories WHERE id = ?', [id]);
-  return result;
+// Get category by ID for the current user
+export const getCategoryById = async (id: string): Promise<Category | null> => {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching category:', error);
+    return null;
+  }
+
+  return data;
 };
 
 // Create new category
-export const createCategory = (category: CategoryInsert): number => {
-  const db = openDatabase();
-  const result = db.runSync(
-    `INSERT INTO categories (name, icon, color, type, budget_limit) 
-     VALUES (?, ?, ?, ?, ?)`,
-    [
-      category.name,
-      category.icon,
-      category.color,
-      category.type,
-      category.budget_limit ?? null,
-    ]
-  );
-  return result.lastInsertRowId;
+export const createCategory = async (category: Omit<CategoryInsert, 'user_id'>): Promise<string> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({
+      ...category,
+      user_id: user.id,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating category:', error);
+    throw error;
+  }
+
+  return data.id;
 };
 
 // Update category
-export const updateCategory = (
-  id: number,
-  updates: Partial<CategoryInsert>
-): void => {
-  const db = openDatabase();
-  const fields: string[] = [];
-  const values: any[] = [];
+export const updateCategory = async (
+  id: string,
+  updates: Partial<Omit<CategoryInsert, 'user_id'>>
+): Promise<void> => {
+  const { error } = await supabase
+    .from('categories')
+    .update(updates)
+    .eq('id', id);
 
-  if (updates.name !== undefined) {
-    fields.push('name = ?');
-    values.push(updates.name);
+  if (error) {
+    console.error('Error updating category:', error);
+    throw error;
   }
-  if (updates.icon !== undefined) {
-    fields.push('icon = ?');
-    values.push(updates.icon);
-  }
-  if (updates.color !== undefined) {
-    fields.push('color = ?');
-    values.push(updates.color);
-  }
-  if (updates.type !== undefined) {
-    fields.push('type = ?');
-    values.push(updates.type);
-  }
-  if (updates.budget_limit !== undefined) {
-    fields.push('budget_limit = ?');
-    values.push(updates.budget_limit);
-  }
-
-  if (fields.length === 0) return;
-
-  values.push(id);
-  db.runSync(`UPDATE categories SET ${fields.join(', ')} WHERE id = ?`, values);
 };
 
 // Delete category
-export const deleteCategory = (id: number): void => {
-  const db = openDatabase();
-  db.runSync('DELETE FROM categories WHERE id = ?', [id]);
+export const deleteCategory = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('categories')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting category:', error);
+    throw error;
+  }
 };
 
-// Get category count
-export const getCategoryCount = (): number => {
-  const db = openDatabase();
-  const result = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM categories');
-  return result?.count ?? 0;
+// Get category count for the current user
+export const getCategoryCount = async (): Promise<number> => {
+  const { count, error } = await supabase
+    .from('categories')
+    .select('*', { count: 'exact', head: true });
+
+  if (error) {
+    console.error('Error getting category count:', error);
+    return 0;
+  }
+
+  return count || 0;
 };
 
-// Seed default categories if none exist
-export const seedDefaultCategories = (): void => {
-  const count = getCategoryCount();
-  if (count > 0) return; // Categories already exist
-
-  const defaultCategories: CategoryInsert[] = [
-    { name: 'Food', icon: '🍔', color: '#FF6B6B', type: 'expense' },
-    { name: 'Transport', icon: '🚗', color: '#4ECDC4', type: 'expense' },
-    { name: 'Shopping', icon: '🛍️', color: '#45B7D1', type: 'expense' },
-    { name: 'Entertainment', icon: '🎬', color: '#96CEB4', type: 'expense' },
-    { name: 'Bills', icon: '📄', color: '#F7DC6F', type: 'expense' },
-    { name: 'Healthcare', icon: '🏥', color: '#BB8FCE', type: 'expense' },
-    { name: 'Salary', icon: '💰', color: '#58D68D', type: 'income' },
-    { name: 'Freelance', icon: '💼', color: '#5DADE2', type: 'income' },
-  ];
-
-  defaultCategories.forEach(category => {
-    createCategory(category);
-  });
-
-  console.log('Default categories seeded');
+// Seed default categories (called automatically by Supabase trigger on user creation)
+// This function is kept for compatibility but is not needed with Supabase
+export const seedDefaultCategories = async (): Promise<void> => {
+  // Default categories are automatically seeded by Supabase trigger
+  // when a new user signs up. This function is kept for backwards compatibility.
+  console.log('Default categories are automatically seeded on user signup');
 };

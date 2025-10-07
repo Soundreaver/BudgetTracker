@@ -33,11 +33,12 @@ import {
 } from '@/components/ui';
 import { useTransactionStore } from '@/store';
 import { getAllCategories } from '@/services/categoryService';
+import type { Category } from '@/types/database';
 
 type Period = 'week' | 'month' | 'year' | 'custom';
 
 interface CategoryStat {
-  id: number;
+  id: string;
   name: string;
   icon: string;
   color: string;
@@ -52,12 +53,23 @@ export const StatisticsScreen: React.FC = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customStartDate, setCustomStartDate] = useState<Date>(subMonths(new Date(), 1));
   const [customEndDate, setCustomEndDate] = useState<Date>(new Date());
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const { transactions, loadTransactions } = useTransactionStore();
 
   useEffect(() => {
-    loadTransactions();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      await loadTransactions();
+      const loadedCategories = await getAllCategories();
+      setCategories(loadedCategories);
+    } catch (error) {
+      console.error('Error loading statistics data:', error);
+    }
+  };
 
   // Calculate date range based on selected period
   const { startDate, endDate, prevStartDate, prevEndDate } = useMemo(() => {
@@ -120,10 +132,10 @@ export const StatisticsScreen: React.FC = () => {
 
   // Calculate category statistics
   const categoryStats: CategoryStat[] = useMemo(() => {
-    const categories = getAllCategories().filter(c => c.type === 'expense');
+    const expenseCategories = categories.filter(c => c.type === 'expense');
     const totalExpenses = currentTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-    const stats = categories.map(category => {
+    const stats = expenseCategories.map(category => {
       const categoryTransactions = currentTransactions.filter(t => t.category_id === category.id);
       const prevCategoryTransactions = previousTransactions.filter(t => t.category_id === category.id);
       
@@ -148,7 +160,7 @@ export const StatisticsScreen: React.FC = () => {
     return stats
       .filter(s => s.amount > 0)
       .sort((a, b) => b.amount - a.amount);
-  }, [currentTransactions, previousTransactions]);
+  }, [currentTransactions, previousTransactions, categories]);
 
   // Calculate totals
   const totals = useMemo(() => {

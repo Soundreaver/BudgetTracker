@@ -1,163 +1,196 @@
-import { openDatabase } from './database';
+import { supabase } from './supabase';
 import type { Transaction, TransactionInsert, TransactionUpdate } from '@/types/database';
 
-// Get all transactions
-export const getAllTransactions = (): Transaction[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Transaction>(
-    'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
-  );
-  return result;
+// Get all transactions for the current user
+export const getAllTransactions = async (): Promise<Transaction[]> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get transactions by date range
-export const getTransactionsByDateRange = (
+export const getTransactionsByDateRange = async (
   startDate: string,
   endDate: string
-): Transaction[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Transaction>(
-    'SELECT * FROM transactions WHERE date BETWEEN ? AND ? ORDER BY date DESC',
-    [startDate, endDate]
-  );
-  return result;
+): Promise<Transaction[]> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching transactions by date range:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get transactions by category
-export const getTransactionsByCategory = (categoryId: number): Transaction[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Transaction>(
-    'SELECT * FROM transactions WHERE category_id = ? ORDER BY date DESC',
-    [categoryId]
-  );
-  return result;
+export const getTransactionsByCategory = async (categoryId: string): Promise<Transaction[]> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('category_id', categoryId)
+    .order('date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching transactions by category:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get transactions by type
-export const getTransactionsByType = (type: 'expense' | 'income'): Transaction[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Transaction>(
-    'SELECT * FROM transactions WHERE type = ? ORDER BY date DESC',
-    [type]
-  );
-  return result;
+export const getTransactionsByType = async (type: 'expense' | 'income'): Promise<Transaction[]> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('type', type)
+    .order('date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching transactions by type:', error);
+    throw error;
+  }
+
+  return data || [];
 };
 
 // Get transaction by ID
-export const getTransactionById = (id: number): Transaction | null => {
-  const db = openDatabase();
-  const result = db.getFirstSync<Transaction>('SELECT * FROM transactions WHERE id = ?', [id]);
-  return result;
+export const getTransactionById = async (id: string): Promise<Transaction | null> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching transaction:', error);
+    return null;
+  }
+
+  return data;
 };
 
 // Create new transaction
-export const createTransaction = (transaction: TransactionInsert): number => {
-  const db = openDatabase();
-  const result = db.runSync(
-    `INSERT INTO transactions (category_id, amount, description, date, type, payment_method, is_recurring, recurring_frequency) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      transaction.category_id,
-      transaction.amount,
-      transaction.description,
-      transaction.date,
-      transaction.type,
-      transaction.payment_method,
-      transaction.is_recurring ? 1 : 0,
-      transaction.recurring_frequency ?? null,
-    ]
-  );
-  return result.lastInsertRowId;
+export const createTransaction = async (transaction: Omit<TransactionInsert, 'user_id'>): Promise<string> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert({
+      ...transaction,
+      user_id: user.id,
+      is_recurring: transaction.is_recurring ?? false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating transaction:', error);
+    throw error;
+  }
+
+  return data.id;
 };
 
 // Update transaction
-export const updateTransaction = (id: number, updates: TransactionUpdate): void => {
-  const db = openDatabase();
-  const fields: string[] = [];
-  const values: any[] = [];
+export const updateTransaction = async (id: string, updates: TransactionUpdate): Promise<void> => {
+  const { error } = await supabase
+    .from('transactions')
+    .update(updates)
+    .eq('id', id);
 
-  if (updates.category_id !== undefined) {
-    fields.push('category_id = ?');
-    values.push(updates.category_id);
+  if (error) {
+    console.error('Error updating transaction:', error);
+    throw error;
   }
-  if (updates.amount !== undefined) {
-    fields.push('amount = ?');
-    values.push(updates.amount);
-  }
-  if (updates.description !== undefined) {
-    fields.push('description = ?');
-    values.push(updates.description);
-  }
-  if (updates.date !== undefined) {
-    fields.push('date = ?');
-    values.push(updates.date);
-  }
-  if (updates.type !== undefined) {
-    fields.push('type = ?');
-    values.push(updates.type);
-  }
-  if (updates.payment_method !== undefined) {
-    fields.push('payment_method = ?');
-    values.push(updates.payment_method);
-  }
-  if (updates.is_recurring !== undefined) {
-    fields.push('is_recurring = ?');
-    values.push(updates.is_recurring ? 1 : 0);
-  }
-  if (updates.recurring_frequency !== undefined) {
-    fields.push('recurring_frequency = ?');
-    values.push(updates.recurring_frequency);
-  }
-
-  if (fields.length === 0) return;
-
-  fields.push('updated_at = datetime("now")');
-  values.push(id);
-
-  db.runSync(`UPDATE transactions SET ${fields.join(', ')} WHERE id = ?`, values);
 };
 
 // Delete transaction
-export const deleteTransaction = (id: number): void => {
-  const db = openDatabase();
-  db.runSync('DELETE FROM transactions WHERE id = ?', [id]);
+export const deleteTransaction = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting transaction:', error);
+    throw error;
+  }
 };
 
 // Get total expenses
-export const getTotalExpenses = (startDate?: string, endDate?: string): number => {
-  const db = openDatabase();
-  let query = 'SELECT SUM(amount) as total FROM transactions WHERE type = "expense"';
-  const params: string[] = [];
+export const getTotalExpenses = async (startDate?: string, endDate?: string): Promise<number> => {
+  let query = supabase
+    .from('transactions')
+    .select('amount')
+    .eq('type', 'expense');
 
   if (startDate && endDate) {
-    query += ' AND date BETWEEN ? AND ?';
-    params.push(startDate, endDate);
+    query = query.gte('date', startDate).lte('date', endDate);
   }
 
-  const result = db.getFirstSync<{ total: number | null }>(query, params);
-  return result?.total ?? 0;
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error getting total expenses:', error);
+    return 0;
+  }
+
+  return data?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 };
 
 // Get total income
-export const getTotalIncome = (startDate?: string, endDate?: string): number => {
-  const db = openDatabase();
-  let query = 'SELECT SUM(amount) as total FROM transactions WHERE type = "income"';
-  const params: string[] = [];
+export const getTotalIncome = async (startDate?: string, endDate?: string): Promise<number> => {
+  let query = supabase
+    .from('transactions')
+    .select('amount')
+    .eq('type', 'income');
 
   if (startDate && endDate) {
-    query += ' AND date BETWEEN ? AND ?';
-    params.push(startDate, endDate);
+    query = query.gte('date', startDate).lte('date', endDate);
   }
 
-  const result = db.getFirstSync<{ total: number | null }>(query, params);
-  return result?.total ?? 0;
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error getting total income:', error);
+    return 0;
+  }
+
+  return data?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 };
 
 // Get recurring transactions
-export const getRecurringTransactions = (): Transaction[] => {
-  const db = openDatabase();
-  const result = db.getAllSync<Transaction>(
-    'SELECT * FROM transactions WHERE is_recurring = 1 ORDER BY date DESC'
-  );
-  return result;
+export const getRecurringTransactions = async (): Promise<Transaction[]> => {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('is_recurring', true)
+    .order('date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching recurring transactions:', error);
+    throw error;
+  }
+
+  return data || [];
 };

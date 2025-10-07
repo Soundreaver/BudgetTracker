@@ -18,10 +18,10 @@ import {
   CustomButton,
 } from '@/components/ui';
 import { getAllCategories, createCategory, deleteCategory } from '@/services/categoryService';
-import { useSettingsStore } from '@/store';
+import { useSettingsStore, useAuthStore } from '@/store';
 import { CURRENCIES, getCurrencyByCode, type Currency } from '@/utils/currency';
-import { clearAllData } from '@/utils/debugUtils';
 import type { Category } from '@/types/database';
+import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -60,52 +60,96 @@ export const SettingsScreen: React.FC = () => {
     '📱', '💡', '🛒', '🎁', '💰', '📊', '💳', '🏦',
   ];
 
+  const { signOut, user } = useAuthStore();
+
   useEffect(() => {
     loadCategories();
   }, []);
 
-  const loadCategories = () => {
-    const loadedCategories = getAllCategories();
-    setCategories(loadedCategories);
+  const loadCategories = async () => {
+    try {
+      const loadedCategories = await getAllCategories();
+      setCategories(loadedCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
   };
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      alert('Please enter a category name');
+      Alert.alert('Error', 'Please enter a category name');
       return;
     }
 
     if (!newCategoryIcon) {
-      alert('Please select an icon');
+      Alert.alert('Error', 'Please select an icon');
       return;
     }
 
-    await triggerHaptic('success');
+    try {
+      await triggerHaptic('success');
 
-    createCategory({
-      name: newCategoryName,
-      icon: newCategoryIcon,
-      color: newCategoryColor,
-      type: newCategoryType,
-    });
+      await createCategory({
+        name: newCategoryName,
+        icon: newCategoryIcon,
+        color: newCategoryColor,
+        type: newCategoryType,
+      });
 
-    // Reset form
-    setNewCategoryName('');
-    setNewCategoryIcon('');
-    setNewCategoryColor(colors.primary[500]);
-    setNewCategoryType('expense');
-    setShowAddCategoryModal(false);
-    loadCategories();
+      // Reset form
+      setNewCategoryName('');
+      setNewCategoryIcon('');
+      setNewCategoryColor(colors.primary[500]);
+      setNewCategoryType('expense');
+      setShowAddCategoryModal(false);
+      loadCategories();
+    } catch (error) {
+      console.error('Error creating category:', error);
+      Alert.alert('Error', 'Failed to create category');
+    }
   };
 
-  const handleDeleteCategory = async (id: number) => {
+  const handleDeleteCategory = async (id: string) => {
     await triggerHaptic('warning');
     
-    // Confirm deletion
-    if (confirm('Are you sure you want to delete this category?')) {
-      deleteCategory(id);
-      loadCategories();
-    }
+    Alert.alert(
+      'Delete Category',
+      'Are you sure you want to delete this category?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCategory(id);
+              loadCategories();
+            } catch (error) {
+              console.error('Error deleting category:', error);
+              Alert.alert('Error', 'Failed to delete category');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await triggerHaptic('warning');
+            await signOut();
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -163,6 +207,35 @@ export const SettingsScreen: React.FC = () => {
           )}
         </View>
 
+        {/* Account Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <View style={styles.sectionSpacer} />
+          
+          <View style={styles.preferenceCard}>
+            <View style={styles.preferenceLeft}>
+              <Text style={styles.preferenceIcon}>👤</Text>
+              <View>
+                <Text style={styles.preferenceLabel}>Email</Text>
+                <Text style={styles.preferenceValue}>
+                  {user?.email || 'Not logged in'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleSignOut}
+            style={styles.signOutCard}
+          >
+            <View style={styles.preferenceLeft}>
+              <Text style={styles.preferenceIcon}>🚪</Text>
+              <Text style={styles.signOutLabel}>Sign Out</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.error[500]} />
+          </TouchableOpacity>
+        </View>
+
         {/* Preferences Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
@@ -185,33 +258,6 @@ export const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Danger Zone */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.error[500] }]}>Danger Zone</Text>
-          <View style={styles.sectionSpacer} />
-          
-          <TouchableOpacity
-            onPress={async () => {
-              if (confirm('⚠️ This will delete ALL your data (transactions, budgets, savings goals). This cannot be undone! Are you sure?')) {
-                await triggerHaptic('warning');
-                clearAllData();
-                loadCategories();
-                alert('✅ Database cleared successfully');
-              }
-            }}
-            style={styles.dangerCard}
-          >
-            <View style={styles.preferenceLeft}>
-              <Text style={styles.preferenceIcon}>🗑️</Text>
-              <View>
-                <Text style={styles.dangerLabel}>Clear All Data</Text>
-                <Text style={styles.dangerSubtext}>
-                  Delete all transactions, budgets, and goals
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
 
         {/* App Info Section */}
         <View style={styles.section}>
@@ -623,5 +669,22 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.error[600],
     marginTop: spacing.xs,
+  },
+  signOutCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.error[200],
+    ...shadows.sm,
+  },
+  signOutLabel: {
+    ...typography.body,
+    color: colors.error[700],
+    fontWeight: '600',
   },
 });

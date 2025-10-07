@@ -1,15 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Text, View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { GluestackUIProvider } from '@gluestack-ui/themed';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { QueryProvider } from './src/providers/QueryProvider';
 import { config } from './src/config/gluestack-ui.config';
-import { initDatabase } from './src/services/database';
+import { useAuthStore } from './src/store/authStore';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { SignUpScreen } from './src/screens/SignUpScreen';
 import {
   DashboardScreen,
   TransactionsScreen,
@@ -20,6 +23,7 @@ import {
 } from './src/screens';
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
 function MainNavigator() {
   const insets = useSafeAreaInsets();
@@ -110,27 +114,26 @@ function MainNavigator() {
   );
 }
 
+function AuthNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="SignUp" component={SignUpScreen} />
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
-  const [isDbInitialized, setIsDbInitialized] = useState(false);
+  const { isAuthenticated, isLoading, initialize } = useAuthStore();
 
   useEffect(() => {
-    const initDb = async () => {
-      try {
-        await initDatabase();
-        setIsDbInitialized(true);
-      } catch (error) {
-        console.error('Database initialization error:', error);
-      }
-    };
-
-    initDb();
+    initialize();
   }, []);
 
-  if (!isDbInitialized) {
+  if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={{ marginTop: 10 }}>Initializing database...</Text>
       </View>
     );
   }
@@ -141,7 +144,7 @@ export default function App() {
         <GluestackUIProvider config={config}>
           <QueryProvider>
             <NavigationContainer>
-              <MainNavigator />
+              {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
             </NavigationContainer>
             <StatusBar style="auto" />
           </QueryProvider>

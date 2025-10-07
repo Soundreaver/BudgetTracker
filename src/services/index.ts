@@ -1,6 +1,3 @@
-// Database initialization
-export { initDatabase, resetDatabase, openDatabase } from './database';
-
 // Category services
 export {
   getAllCategories,

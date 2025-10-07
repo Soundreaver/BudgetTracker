@@ -29,7 +29,7 @@ import { getBudgetSpending } from '@/services/budgetService';
 import type { BudgetPeriod, Category } from '@/types/database';
 
 interface BudgetCardData {
-  id: number;
+  id: string;
   categoryName: string;
   categoryIcon: string;
   categoryColor: string;
@@ -47,7 +47,7 @@ export const BudgetScreen: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
 
   // Add budget form state
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [budgetAmount, setBudgetAmount] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<BudgetPeriod>('monthly');
   const [startDate, setStartDate] = useState(new Date());
@@ -67,23 +67,29 @@ export const BudgetScreen: React.FC = () => {
   }, [transactions]);
 
   const loadData = async () => {
-    await loadActiveBudgets();
-    
-    // Load categories
-    const loadedCategories = getAllCategories();
-    
-    // Add "All Categories" option at the beginning
-    const allCategoriesOption: Category = {
-      id: 0,
-      name: 'All Categories',
-      icon: '📊',
-      color: colors.primary[500],
-      type: 'expense',
-      budget_limit: null,
-      created_at: new Date().toISOString(),
-    };
-    
-    setCategories([allCategoriesOption, ...loadedCategories]);
+    try {
+      await loadActiveBudgets();
+      
+      // Load categories
+      const loadedCategories = await getAllCategories();
+      
+      // Add "All Categories" option at the beginning
+      const allCategoriesOption: Category = {
+        id: '0',
+        user_id: '',
+        name: 'All Categories',
+        icon: '📊',
+        color: colors.primary[500],
+        type: 'expense',
+        budget_limit: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      setCategories([allCategoriesOption, ...loadedCategories]);
+    } catch (error) {
+      console.error('Error loading budget data:', error);
+    }
   };
 
   const handleRefresh = async () => {
@@ -99,66 +105,87 @@ export const BudgetScreen: React.FC = () => {
       return;
     }
 
-    await triggerHaptic('success');
+    try {
+      await triggerHaptic('success');
 
-    // Always start budget from TODAY to avoid counting old transactions
-    const today = new Date();
-    const endDate = addMonths(today, selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'yearly' ? 12 : 0);
+      // Always start budget from TODAY to avoid counting old transactions
+      const today = new Date();
+      const endDate = addMonths(today, selectedPeriod === 'monthly' ? 1 : selectedPeriod === 'yearly' ? 12 : 0);
 
-    // If no category selected or "All Categories" (id: 0), set category_id to null
-    const categoryId = selectedCategory === 0 ? null : selectedCategory;
+      // If no category selected or "All Categories" (id: '0'), set category_id to null
+      const categoryId = selectedCategory === '0' ? null : selectedCategory;
 
-    addBudget({
-      category_id: categoryId || null,
-      amount: parseFloat(budgetAmount),
-      period: selectedPeriod,
-      start_date: format(today, 'yyyy-MM-dd'),
-      end_date: format(endDate, 'yyyy-MM-dd'),
-      alert_threshold: parseInt(alertThreshold) || 80,
-    });
+      await addBudget({
+        category_id: categoryId || null,
+        amount: parseFloat(budgetAmount),
+        period: selectedPeriod,
+        start_date: format(today, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd'),
+        alert_threshold: parseInt(alertThreshold) || 80,
+      });
 
-    // Reset form
-    setSelectedCategory(null);
-    setBudgetAmount('');
-    setSelectedPeriod('monthly');
-    setStartDate(new Date());
-    setAlertThreshold('80');
-    setShowAddModal(false);
+      // Reset form
+      setSelectedCategory(null);
+      setBudgetAmount('');
+      setSelectedPeriod('monthly');
+      setStartDate(new Date());
+      setAlertThreshold('80');
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Error adding budget:', error);
+      alert('Failed to add budget. Please try again.');
+    }
   };
 
-  const handleDeleteBudget = async (id: number) => {
-    await triggerHaptic('heavy');
-    removeBudget(id);
+  const handleDeleteBudget = async (id: string) => {
+    try {
+      await triggerHaptic('heavy');
+      await removeBudget(id);
+    } catch (error) {
+      console.error('Error deleting budget:', error);
+      alert('Failed to delete budget');
+    }
   };
 
   // Calculate budget card data with real spending
-  const budgetCards: BudgetCardData[] = activeBudgets.map((budget) => {
-    const spent = getBudgetSpending(budget);
-    let categoryName = 'All Categories';
-    let categoryIcon = '📊';
-    let categoryColor = colors.primary[500];
+  const [budgetCards, setBudgetCards] = useState<BudgetCardData[]>([]);
 
-    if (budget.category_id) {
-      const category = getCategoryById(budget.category_id);
-      if (category) {
-        categoryName = category.name;
-        categoryIcon = category.icon;
-        categoryColor = category.color;
-      }
-    }
+  useEffect(() => {
+    const calculateBudgetCards = async () => {
+      const cards = await Promise.all(
+        activeBudgets.map(async (budget) => {
+          const spent = await getBudgetSpending(budget);
+          let categoryName = 'All Categories';
+          let categoryIcon = '📊';
+          let categoryColor = colors.primary[500];
 
-    return {
-      id: budget.id,
-      categoryName,
-      categoryIcon,
-      categoryColor,
-      amount: budget.amount,
-      spent,
-      period: budget.period,
-      startDate: budget.start_date,
-      endDate: budget.end_date,
+          if (budget.category_id) {
+            const category = await getCategoryById(budget.category_id);
+            if (category) {
+              categoryName = category.name;
+              categoryIcon = category.icon;
+              categoryColor = category.color;
+            }
+          }
+
+          return {
+            id: budget.id,
+            categoryName,
+            categoryIcon,
+            categoryColor,
+            amount: budget.amount,
+            spent,
+            period: budget.period,
+            startDate: budget.start_date,
+            endDate: budget.end_date,
+          };
+        })
+      );
+      setBudgetCards(cards);
     };
-  });
+
+    calculateBudgetCards();
+  }, [activeBudgets]);
 
   const totalBudgeted = budgetCards.reduce((sum, b) => sum + b.amount, 0);
   const totalSpent = budgetCards.reduce((sum, b) => sum + b.spent, 0);
@@ -373,8 +400,8 @@ export const BudgetScreen: React.FC = () => {
         style={styles.fabContainer}
       >
         <TouchableOpacity
-          onPress={() => {
-            loadData(); // Reload categories when opening modal
+          onPress={async () => {
+            await loadData(); // Reload categories when opening modal
             setShowAddModal(true);
           }}
           activeOpacity={0.8}
