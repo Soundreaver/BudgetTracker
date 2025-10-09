@@ -3,3 +3,4 @@ export { useAuthStore } from './authStore';
 export { useBudgetStore } from './budgetStore';
 export { useTransactionStore } from './transactionStore';
 export { useSettingsStore } from './settingsStore';
+export { usePendingTransactionStore } from './pendingTransactionStore';

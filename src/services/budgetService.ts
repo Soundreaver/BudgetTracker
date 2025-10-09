@@ -22,7 +22,7 @@ export const getBudgetById = async (id: string): Promise<Budget | null> => {
     .from('budgets')
     .select('*')
     .eq('id', id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('Error fetching budget:', error);

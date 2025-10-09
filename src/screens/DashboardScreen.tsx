@@ -24,8 +24,10 @@ import {
   DateTimePicker,
   CustomInput,
   CustomButton,
+  PendingTransactionsModal,
 } from '@/components/ui';
 import { useAuthStore, useBudgetStore, useTransactionStore, useSettingsStore } from '@/store';
+import { usePendingTransactions } from '@/hooks/usePendingTransactions';
 import { getAllCategories } from '@/services/categoryService';
 import { getCurrencyByCode, formatCurrency } from '@/utils/currency';
 import type { Category } from '@/types/database';
@@ -36,6 +38,7 @@ export const DashboardScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showPendingModal, setShowPendingModal] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   
   // Add transaction form state
@@ -46,11 +49,13 @@ export const DashboardScreen: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
+  const [isAddingTransaction, setIsAddingTransaction] = useState(false);
 
   const { user } = useAuthStore();
   const { activeBudgets, loadActiveBudgets } = useBudgetStore();
   const { filteredTransactions, loadTransactions, getTotals, addTransaction } = useTransactionStore();
   const { currency: currencyCode } = useSettingsStore();
+  const { pendingCount } = usePendingTransactions();
   const currency = getCurrencyByCode(currencyCode);
 
   useEffect(() => {
@@ -105,6 +110,7 @@ export const DashboardScreen: React.FC = () => {
       return;
     }
 
+    setIsAddingTransaction(true);
     try {
       await triggerHaptic('success');
       
@@ -133,6 +139,8 @@ export const DashboardScreen: React.FC = () => {
     } catch (error) {
       console.error('Error adding transaction:', error);
       alert('Failed to add transaction. Please try again.');
+    } finally {
+      setIsAddingTransaction(false);
     }
   };
 
@@ -183,14 +191,22 @@ export const DashboardScreen: React.FC = () => {
           <View style={styles.headerTop}>
             <View>
               <Text style={styles.greeting}>{getGreeting()},</Text>
-              <Text style={styles.userName}>{user?.name || 'User'}</Text>
+              <Text style={styles.userName}>{user?.email?.split('@')[0] || 'User'}</Text>
               <Text style={styles.date}>{format(new Date(), 'EEEE, MMMM dd')}</Text>
             </View>
             <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.notificationButton}>
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.badgeText}>3</Text>
-                </View>
+              <TouchableOpacity 
+                style={styles.notificationButton}
+                onPress={async () => {
+                  await triggerHaptic('light');
+                  setShowPendingModal(true);
+                }}
+              >
+                {pendingCount > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.badgeText}>{pendingCount}</Text>
+                  </View>
+                )}
                 <Ionicons name="notifications-outline" size={24} color={colors.neutral[700]} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.settingsButton}>
@@ -300,24 +316,27 @@ export const DashboardScreen: React.FC = () => {
           </View>
           <View style={styles.sectionSpacer} />
           {recentTransactions.length > 0 ? (
-            recentTransactions.map((transaction) => (
-              <TransactionCard
-                key={transaction.id}
-                id={transaction.id}
-                amount={transaction.amount}
-                description={transaction.description}
-                category={{
-                  name: 'Category', // Would get from category service
-                  icon: '💰',
-                  color: colors.primary[500],
-                }}
-                date={transaction.date}
-                type={transaction.type}
-                onPress={() => console.log('View transaction')}
-                onEdit={(id) => console.log('Edit', id)}
-                onDelete={(id) => console.log('Delete', id)}
-              />
-            ))
+            recentTransactions.map((transaction) => {
+              const category = categories.find(c => c.id === transaction.category_id);
+              return (
+                <TransactionCard
+                  key={transaction.id}
+                  id={transaction.id}
+                  amount={transaction.amount}
+                  description={transaction.description}
+                  category={{
+                    name: category?.name || 'Category',
+                    icon: category?.icon || '💰',
+                    color: category?.color || colors.primary[500],
+                  }}
+                  date={transaction.date}
+                  type={transaction.type}
+                  onPress={() => console.log('View transaction')}
+                  onEdit={(id) => console.log('Edit', id)}
+                  onDelete={(id) => console.log('Delete', id)}
+                />
+              );
+            })
           ) : (
             <MotiView
               from={{ opacity: 0 }}
@@ -351,6 +370,12 @@ export const DashboardScreen: React.FC = () => {
           <Ionicons name="add" size={32} color={colors.white} />
         </TouchableOpacity>
       </MotiView>
+
+      {/* Pending Transactions Modal */}
+      <PendingTransactionsModal
+        visible={showPendingModal}
+        onClose={() => setShowPendingModal(false)}
+      />
 
       {/* Transaction Entry Modal */}
       <BottomSheet
@@ -405,9 +430,14 @@ export const DashboardScreen: React.FC = () => {
           <Text style={styles.modalSectionTitle}>Category</Text>
           {categories.length > 0 ? (
             <CategoryPicker
-              categories={categories}
-              selectedId={selectedCategory || undefined}
-              onSelect={(cat) => setSelectedCategory(cat.id)}
+              categories={categories.map((cat, idx) => ({
+                id: idx,
+                name: cat.name,
+                icon: cat.icon,
+                color: cat.color,
+              }))}
+              selectedId={selectedCategory ? categories.findIndex(c => c.id === selectedCategory) : undefined}
+              onSelect={cat => setSelectedCategory(categories[cat.id].id)}
               columns={4}
             />
           ) : (
@@ -457,6 +487,7 @@ export const DashboardScreen: React.FC = () => {
           variant="primary"
           size="lg"
           fullWidth
+          loading={isAddingTransaction}
           hapticFeedback="medium"
         >
           Save Transaction
@@ -688,6 +719,42 @@ const styles = StyleSheet.create({
     color: colors.neutral[500],
     textAlign: 'center',
     paddingVertical: spacing.lg,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  categoryItem: {
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: colors.neutral[200],
+    backgroundColor: colors.white,
+    width: 80,
+    marginRight: spacing.sm,
+  },
+  categoryItemSelected: {
+    borderWidth: 2,
+    backgroundColor: colors.neutral[50],
+  },
+  categoryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  categoryEmoji: {
+    fontSize: 20,
+  },
+  categoryName: {
+    ...typography.tiny,
+    color: colors.neutral[700],
+    textAlign: 'center',
   },
   skeletonContainer: {
     padding: spacing.xl,

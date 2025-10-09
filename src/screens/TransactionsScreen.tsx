@@ -54,6 +54,7 @@ export const TransactionsScreen: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
+  const [isAddingTransaction, setIsAddingTransaction] = useState(false);
 
   const {
     filteredTransactions,
@@ -111,6 +112,7 @@ export const TransactionsScreen: React.FC = () => {
       return;
     }
 
+    setIsAddingTransaction(true);
     try {
       await triggerHaptic('success');
 
@@ -136,6 +138,8 @@ export const TransactionsScreen: React.FC = () => {
     } catch (error) {
       console.error('Error adding transaction:', error);
       alert('Failed to add transaction. Please try again.');
+    } finally {
+      setIsAddingTransaction(false);
     }
   };
 
@@ -456,6 +460,7 @@ export const TransactionsScreen: React.FC = () => {
           variant="primary"
           size="lg"
           fullWidth
+          loading={isAddingTransaction}
           hapticFeedback="medium"
         >
           Save Transaction

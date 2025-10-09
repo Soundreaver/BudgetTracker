@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { formatCurrency } from '@/utils/currency';
+import type { PendingTransaction } from '@/types/database';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -135,4 +136,45 @@ export const getBadgeCount = async (): Promise<number> => {
 
 export const setBadgeCount = async (count: number): Promise<void> => {
   await Notifications.setBadgeCountAsync(count);
+};
+
+export const schedulePendingTransactionAlert = async (
+  transaction: PendingTransaction,
+  currencyCode: string = 'USD'
+): Promise<void> => {
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) {
+      return;
+    }
+
+    const amount = formatCurrency(transaction.suggested_amount, currencyCode);
+    const merchantName = transaction.merchant_name || 'Unknown Merchant';
+
+    // Configure notification channel for pending transactions on Android
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('pending-transactions', {
+        name: 'Pending Transactions',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#10B981',
+      });
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '💳 New Transaction Detected',
+        body: `Spent ${amount} at ${merchantName} - Tap to review`,
+        data: {
+          pendingTransactionId: transaction.id,
+          type: 'pending-transaction',
+        },
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
+      trigger: null, // Send immediately
+    });
+  } catch (error) {
+    console.error('Error scheduling pending transaction alert:', error);
+  }
 };

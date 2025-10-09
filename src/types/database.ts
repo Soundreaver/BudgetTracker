@@ -35,6 +35,16 @@ export interface Database {
         Insert: SavingsGoalInsert;
         Update: SavingsGoalUpdate;
       };
+      pending_transactions: {
+        Row: PendingTransaction;
+        Insert: PendingTransactionInsert;
+        Update: PendingTransactionUpdate;
+      };
+      user_email_config: {
+        Row: UserEmailConfig;
+        Insert: UserEmailConfigInsert;
+        Update: UserEmailConfigUpdate;
+      };
     };
     Views: {
       [_ in never]: never;
@@ -163,4 +173,80 @@ export interface SavingsGoalUpdate {
   deadline?: string;
   icon?: string;
   color?: string;
+}
+
+// Pending Transaction Interface
+export interface PendingTransaction {
+  id: string;
+  user_id: string;
+  email_subject: string | null;
+  email_from: string | null;
+  email_date: string | null;
+  email_id: string;
+  parsed_data: Json | null;
+  suggested_amount: number;
+  suggested_description: string;
+  suggested_date: string;
+  suggested_category_id: string | null;
+  suggested_type: TransactionType;
+  suggested_payment_method: string | null;
+  merchant_name: string | null;
+  confidence_score: number | null;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface PendingTransactionInsert {
+  user_id: string;
+  email_id: string;
+  suggested_amount: number;
+  suggested_description: string;
+  suggested_date: string;
+  suggested_type: TransactionType;
+  email_subject?: string | null;
+  email_from?: string | null;
+  email_date?: string | null;
+  parsed_data?: Json | null;
+  suggested_category_id?: string | null;
+  suggested_payment_method?: string | null;
+  merchant_name?: string | null;
+  confidence_score?: number | null;
+  status?: 'pending' | 'approved' | 'rejected';
+  reviewed_at?: string | null;
+}
+
+export interface PendingTransactionUpdate {
+  suggested_amount?: number;
+  suggested_description?: string;
+  suggested_date?: string;
+  suggested_category_id?: string | null;
+  suggested_type?: TransactionType;
+  suggested_payment_method?: string | null;
+  status?: 'pending' | 'approved' | 'rejected';
+  reviewed_at?: string | null;
+  confidence_score?: number | null;
+  merchant_name?: string | null;
+}
+
+// User Email Config Interface
+export interface UserEmailConfig {
+  id: string;
+  user_id: string;
+  email_address: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserEmailConfigInsert {
+  user_id: string;
+  email_address: string;
+  is_active?: boolean;
+}
+
+export interface UserEmailConfigUpdate {
+  email_address?: string;
+  is_active?: boolean;
+  updated_at?: string;
 }
