@@ -129,7 +129,7 @@ export const PendingTransactionsModal: React.FC<PendingTransactionsModalProps> =
   return (
     <>
       <BottomSheet
-        visible={visible}
+        visible={visible && !isReviewModalVisible}
         onClose={onClose}
         title={`Pending Transactions (${pendingTransactions.length})`}
         snapPoint={75}

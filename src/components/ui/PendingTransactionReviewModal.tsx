@@ -31,6 +31,7 @@ export const PendingTransactionReviewModal: React.FC<PendingTransactionReviewMod
   const [categories, setCategories] = useState<Category[]>([]);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [merchantName, setMerchantName] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -55,6 +56,7 @@ export const PendingTransactionReviewModal: React.FC<PendingTransactionReviewMod
     if (transaction && visible) {
       setAmount(transaction.suggested_amount.toString());
       setDescription(transaction.suggested_description);
+      setMerchantName(transaction.merchant_name || '');
       setSelectedCategoryId(transaction.suggested_category_id);
       setSelectedDate(new Date(transaction.suggested_date));
       setPaymentMethod(transaction.suggested_payment_method || 'card');
@@ -129,7 +131,6 @@ export const PendingTransactionReviewModal: React.FC<PendingTransactionReviewMod
 
   if (!transaction) return null;
 
-  const merchantName = transaction.merchant_name || 'Unknown Merchant';
   const confidenceScore = transaction.confidence_score || 0;
   const confidencePercentage = Math.round(confidenceScore * 100);
 
@@ -144,17 +145,19 @@ export const PendingTransactionReviewModal: React.FC<PendingTransactionReviewMod
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Review Transaction" snapPoint={85}>
-      {/* Merchant Info - Read Only */}
-      <View style={styles.infoSection}>
-        <Text style={styles.sectionLabel}>Merchant</Text>
-        <View style={styles.merchantCard}>
-          <Text style={styles.merchantName}>{merchantName}</Text>
-          <View style={[styles.confidenceBadge, { backgroundColor: `${confidenceBadgeColor}20` }]}>
-            <View style={[styles.confidenceDot, { backgroundColor: confidenceBadgeColor }]} />
-            <Text style={[styles.confidenceText, { color: confidenceBadgeColor }]}>
-              {confidencePercentage}% Confidence
-            </Text>
-          </View>
+      {/* Merchant Name - Editable */}
+      <View style={styles.fieldSection}>
+        <CustomInput
+          value={merchantName}
+          onChangeText={setMerchantName}
+          placeholder="Enter merchant name"
+          label="Merchant"
+        />
+        <View style={[styles.confidenceBadge, { backgroundColor: `${confidenceBadgeColor}20`, marginTop: spacing.xs }]}>
+          <View style={[styles.confidenceDot, { backgroundColor: confidenceBadgeColor }]} />
+          <Text style={[styles.confidenceText, { color: confidenceBadgeColor }]}>
+            {confidencePercentage}% Confidence
+          </Text>
         </View>
       </View>
 

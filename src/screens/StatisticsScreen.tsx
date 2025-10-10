@@ -30,6 +30,8 @@ import {
   ProgressBar,
   CustomButton,
   EmptyState,
+  SimpleBarChart,
+  SimplePieChart,
 } from '@/components/ui';
 import { useTransactionStore } from '@/store';
 import { getAllCategories } from '@/services/categoryService';
@@ -375,35 +377,34 @@ export const StatisticsScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Overview</Text>
             
-            {/* Spending Trend Line Chart */}
+            {/* Spending Trend Bar Chart */}
             <ChartCard
               title="Spending Trend"
               period={selectedPeriod === 'custom' ? 'month' : selectedPeriod}
               onPeriodChange={(p) => handlePeriodChange(p as Period)}
             >
-              <MotiView
-                from={{ opacity: 0, translateY: 20 }}
-                animate={{ opacity: 1, translateY: 0 }}
-                transition={{ type: 'timing', duration: 500 }}
-                style={styles.chartPlaceholder}
-              >
-                <Text style={styles.chartLabel}>📈</Text>
-                <Text style={styles.chartSubtext}>Chart visualization coming soon</Text>
-              </MotiView>
+              <SimpleBarChart
+                data={categoryStats.map(cat => ({
+                  label: cat.name.length > 8 ? cat.name.substring(0, 8) + '...' : cat.name,
+                  value: cat.amount,
+                  color: cat.color,
+                }))}
+                height={200}
+              />
             </ChartCard>
 
             {/* Category Breakdown Pie Chart */}
-            <ChartCard title="Category Breakdown">
-              <MotiView
-                from={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', damping: 15, delay: 200 }}
-                style={styles.chartPlaceholder}
-              >
-                <Text style={styles.chartLabel}>🍩</Text>
-                <Text style={styles.chartSubtext}>Chart visualization coming soon</Text>
-              </MotiView>
-            </ChartCard>
+            {/* <ChartCard title="Category Breakdown">
+              <SimplePieChart
+                data={categoryStats.map(cat => ({
+                  label: cat.name,
+                  value: cat.amount,
+                  percentage: cat.percentage,
+                  color: cat.color,
+                }))}
+                size={140}
+              />
+            </ChartCard> */}
           </View>
 
           {/* Category Breakdown List */}

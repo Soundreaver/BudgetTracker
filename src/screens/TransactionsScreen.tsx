@@ -90,7 +90,14 @@ export const TransactionsScreen: React.FC = () => {
   const handleFilterChange = async (filter: FilterType) => {
     await triggerHaptic('selection');
     setActiveFilter(filter);
-    // Would apply filter to store
+    
+    // Apply filter to store
+    const { setFilters } = useTransactionStore.getState();
+    if (filter === 'all') {
+      setFilters({ type: 'all' });
+    } else {
+      setFilters({ type: filter });
+    }
   };
 
   const handleSearchToggle = async () => {
@@ -185,7 +192,7 @@ export const TransactionsScreen: React.FC = () => {
   const renderTransaction = ({ item }: { item: Transaction }) => {
     // Get category synchronously from local state
     const category = categories.find(c => c.id === item.category_id);
-    
+
     return (
       <TransactionCard
         id={item.id}
@@ -199,7 +206,7 @@ export const TransactionsScreen: React.FC = () => {
         date={item.date}
         type={item.type}
         onPress={() => console.log('View transaction')}
-        onEdit={(id) => console.log('Edit', id)}
+        onEdit={id => console.log('Edit', id)}
         onDelete={handleDeleteTransaction}
       />
     );
@@ -343,14 +350,14 @@ export const TransactionsScreen: React.FC = () => {
       >
         <TouchableOpacity
           onPress={async () => {
-            // Reload categories when opening modal
+            setShowAddModal(true);
+            // Reload categories after opening modal (non-blocking)
             try {
               const loadedCategories = await getAllCategories();
               setCategories(loadedCategories);
             } catch (error) {
               console.error('Error loading categories:', error);
             }
-            setShowAddModal(true);
           }}
           activeOpacity={0.8}
           style={[styles.fab, shadows.xl]}
@@ -402,7 +409,7 @@ export const TransactionsScreen: React.FC = () => {
           suggestedAmounts={[10, 25, 50, 100, 200]}
         />
 
-        <View style={styles.modalSection}>
+        <View style={[styles.modalSection, { marginTop: spacing.lg }]}>
           <Text style={styles.modalSectionTitle}>Category</Text>
           {categories.length > 0 ? (
             <CategoryPicker

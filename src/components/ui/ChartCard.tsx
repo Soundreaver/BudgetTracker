@@ -108,20 +108,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.neutral[100],
     borderRadius: borderRadius.md,
-    padding: spacing.xs,
+    padding: 2,
   },
   periodButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
     borderRadius: borderRadius.sm,
   },
   activePeriod: {
     backgroundColor: colors.primary[500],
   },
   periodText: {
-    ...typography.small,
+    ...typography.tiny,
     color: colors.neutral[600],
     fontWeight: '500',
+    fontSize: 11,
   },
   activePeriodText: {
     color: colors.white,

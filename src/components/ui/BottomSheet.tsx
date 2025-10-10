@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, ScrollView, Pressable } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, ScrollView, Pressable, PanResponder, Animated } from 'react-native';
 import { MotiView } from 'moti';
 import { triggerHaptic } from '@/utils/haptics';
 import { colors, spacing, borderRadius, typography, shadows } from '@/constants/theme';
@@ -21,12 +21,57 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   children,
   snapPoint = 60,
 }) => {
+  const [dragOffset, setDragOffset] = useState(0);
+  const translateY = useRef(new Animated.Value(0)).current;
+
   const handleClose = async () => {
     await triggerHaptic('light');
     onClose();
   };
 
   const sheetHeight = (SCREEN_HEIGHT * snapPoint) / 100;
+
+  // Pan responder for drag-to-close gesture
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to vertical drags
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        triggerHaptic('light');
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Only allow dragging down, not up
+        if (gestureState.dy > 0) {
+          setDragOffset(gestureState.dy);
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If dragged down more than 150px, close the modal
+        if (gestureState.dy > 150) {
+          // Just close immediately - modal will handle its own exit animation
+          handleClose();
+          // Reset after a delay to avoid flash
+          setTimeout(() => {
+            translateY.setValue(0);
+            setDragOffset(0);
+          }, 300);
+        } else {
+          // Animate back to position
+          Animated.spring(translateY, {
+            toValue: 0,
+            tension: 80,
+            friction: 10,
+            useNativeDriver: true,
+          }).start();
+          setDragOffset(0);
+        }
+      },
+    })
+  ).current;
 
   return (
     <Modal
@@ -48,14 +93,17 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         </MotiView>
       </Pressable>
 
-      <MotiView
-        from={{ translateY: sheetHeight }}
-        animate={{ translateY: 0 }}
-        exit={{ translateY: sheetHeight }}
-        transition={{ type: 'timing', duration: 300 }}
-        style={[styles.sheet, { height: sheetHeight }, shadows['2xl']]}
+      <Animated.View
+        style={[
+          styles.sheet,
+          { height: sheetHeight },
+          shadows['2xl'],
+          {
+            transform: [{ translateY: translateY }],
+          },
+        ]}
       >
-        <View style={styles.handleBar}>
+        <View style={styles.handleBar} {...panResponder.panHandlers}>
           <View style={styles.handle} />
         </View>
         
@@ -77,7 +125,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         >
           {children}
         </ScrollView>
-      </MotiView>
+      </Animated.View>
     </Modal>
   );
 };

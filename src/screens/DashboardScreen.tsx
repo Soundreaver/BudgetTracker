@@ -87,16 +87,15 @@ export const DashboardScreen: React.FC = () => {
 
   const handleFABPress = async () => {
     await triggerHaptic('medium');
+    setShowTransactionModal(true);
     
-    // Reload categories when opening modal
+    // Reload categories after opening modal (non-blocking)
     try {
       const loadedCategories = await getAllCategories();
       setCategories(loadedCategories);
     } catch (error) {
       console.error('Error loading categories:', error);
     }
-    
-    setShowTransactionModal(true);
   };
 
   const handleAddTransaction = async () => {
@@ -208,9 +207,6 @@ export const DashboardScreen: React.FC = () => {
                   </View>
                 )}
                 <Ionicons name="notifications-outline" size={24} color={colors.neutral[700]} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.settingsButton}>
-                <Ionicons name="settings-outline" size={24} color={colors.neutral[700]} />
               </TouchableOpacity>
             </View>
           </View>

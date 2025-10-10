@@ -18,3 +18,5 @@ export { BudgetProgressCard } from './BudgetProgressCard';
 export { EmptyState } from './EmptyState';
 export { AnimatedTextReveal, AnimatedTextRevealExamples } from './AnimatedTextReveal';
 export type { AnimationType } from './AnimatedTextReveal';
+export { SimpleBarChart } from './SimpleBarChart';
+export { SimplePieChart } from './SimplePieChart';

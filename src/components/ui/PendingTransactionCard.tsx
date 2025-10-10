@@ -63,6 +63,11 @@ export const PendingTransactionCard: React.FC<PendingTransactionCardProps> = ({
   const merchantName = transaction.merchant_name || 'Unknown Merchant';
   const formattedAmount = formatCurrency(transaction.suggested_amount, currencyCode);
   const formattedDate = format(new Date(transaction.suggested_date), 'MMM dd, yyyy');
+  
+  // Determine amount color based on transaction type
+  const amountColor = transaction.suggested_type === 'income' 
+    ? colors.success[500] 
+    : colors.error[500];
 
   return (
     <MotiView
@@ -84,7 +89,7 @@ export const PendingTransactionCard: React.FC<PendingTransactionCardProps> = ({
             </Text>
           </View>
         </View>
-        <Text style={styles.amount}>{formattedAmount}</Text>
+        <Text style={[styles.amount, { color: amountColor }]}>{formattedAmount}</Text>
       </View>
 
       {/* Category and Date */}
@@ -191,7 +196,6 @@ const styles = StyleSheet.create({
   },
   amount: {
     ...typography.heading4,
-    color: colors.error[500],
     fontWeight: '700',
   },
   infoRow: {
