@@ -2,10 +2,6 @@
   "version": 2,
   "builds": [
     {
-      "src": "server.js",
-      "use": "@vercel/node"
-    },
-    {
       "src": "public/**",
       "use": "@vercel/static"
     }
@@ -14,10 +10,6 @@
     {
       "src": "/callback",
       "dest": "/public/index.html"
-    },
-    {
-      "src": "/health",
-      "dest": "/server.js"
     },
     {
       "src": "/(.*)",
