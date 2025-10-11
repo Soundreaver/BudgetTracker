@@ -20,10 +20,31 @@ import {
   BudgetScreen,
   SavingsGoalsScreen,
   SettingsScreen,
+  EmailConnectionScreen,
 } from './src/screens';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+function SettingsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="SettingsMain" 
+        component={SettingsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="EmailConnection" 
+        component={EmailConnectionScreen}
+        options={{ 
+          headerTitle: 'Email Integration',
+          headerBackTitle: 'Settings'
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
 
 function MainNavigator() {
   const insets = useSafeAreaInsets();
@@ -103,8 +124,9 @@ function MainNavigator() {
       />
       <Tab.Screen
         name="Settings"
-        component={SettingsScreen}
+        component={SettingsStack}
         options={{
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="settings-outline" size={24} color={color} />
           ),

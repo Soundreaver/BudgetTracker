@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "soundreaver",
     "name": "budget-tracker",
     "slug": "budget-tracker",
     "version": "1.0.0",
@@ -27,6 +28,7 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "budgettracker"
   }
 }

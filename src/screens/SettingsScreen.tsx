@@ -22,10 +22,12 @@ import { useSettingsStore, useAuthStore } from '@/store';
 import { CURRENCIES, getCurrencyByCode, type Currency } from '@/utils/currency';
 import type { Category } from '@/types/database';
 import { Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
 export const SettingsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const [categories, setCategories] = useState<Category[]>([]);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -241,6 +243,22 @@ export const SettingsScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Preferences</Text>
           <View style={styles.sectionSpacer} />
           
+          <TouchableOpacity
+            onPress={() => navigation.navigate('EmailConnection')}
+            style={styles.preferenceCard}
+          >
+            <View style={styles.preferenceLeft}>
+              <Text style={styles.preferenceIcon}>📧</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.preferenceLabel}>Email Integration</Text>
+                <Text style={styles.preferenceValue} numberOfLines={1}>
+                  Connect Gmail account
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => setShowCurrencyModal(true)}
             style={styles.preferenceCard}

@@ -235,6 +235,11 @@ export interface UserEmailConfig {
   user_id: string;
   email_address: string;
   is_active: boolean;
+  oauth_access_token: string | null;
+  oauth_refresh_token: string | null;
+  oauth_token_expiry: string | null;
+  oauth_provider: string | null;
+  oauth_scopes: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -243,10 +248,20 @@ export interface UserEmailConfigInsert {
   user_id: string;
   email_address: string;
   is_active?: boolean;
+  oauth_access_token?: string | null;
+  oauth_refresh_token?: string | null;
+  oauth_token_expiry?: string | null;
+  oauth_provider?: string | null;
+  oauth_scopes?: string[] | null;
 }
 
 export interface UserEmailConfigUpdate {
   email_address?: string;
   is_active?: boolean;
+  oauth_access_token?: string | null;
+  oauth_refresh_token?: string | null;
+  oauth_token_expiry?: string | null;
+  oauth_provider?: string | null;
+  oauth_scopes?: string[] | null;
   updated_at?: string;
 }
