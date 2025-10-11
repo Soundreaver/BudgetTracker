@@ -282,7 +282,7 @@
             return data.email;
         }
 
-        // Save tokens to Supabase
+        // Save tokens to Supabase via server-side API
         async function saveTokensToSupabase(tokens, userId) {
             try {
                 showStatus('info', 'Almost there...', 'Saving your connection securely...');
@@ -290,56 +290,31 @@
                 // Get user email
                 const userEmail = await getUserEmail(tokens.access_token);
 
-                // Calculate expiry
-                const expiryDate = new Date();
-                expiryDate.setSeconds(expiryDate.getSeconds() + tokens.expires_in);
+                // Call server-side API to save tokens (bypasses RLS)
+                const response = await fetch('/api/save-tokens', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        tokens: tokens,
+                        userEmail: userEmail
+                    })
+                });
 
-                // Import Supabase
-                const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
-
-                // Check if config already exists
-                const { data: existingConfig } = await supabase
-                    .from('user_email_config')
-                    .select('id')
-                    .eq('user_id', userId)
-                    .single();
-
-                const configData = {
-                    user_id: userId,
-                    email_address: userEmail,
-                    oauth_access_token: tokens.access_token,
-                    oauth_refresh_token: tokens.refresh_token || null,
-                    oauth_token_expiry: expiryDate.toISOString(),
-                    oauth_provider: 'gmail',
-                    oauth_scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
-                    is_active: true,
-                    updated_at: new Date().toISOString()
-                };
-
-                let error;
-                if (existingConfig) {
-                    // Update
-                    ({ error } = await supabase
-                        .from('user_email_config')
-                        .update(configData)
-                        .eq('user_id', userId));
-                } else {
-                    // Insert
-                    ({ error } = await supabase
-                        .from('user_email_config')
-                        .insert(configData));
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to save tokens');
                 }
 
-                if (error) {
-                    throw error;
-                }
-
-                showStatus('success', 'Success!', `Gmail account ${userEmail} has been connected successfully. You can now close this window and return to the app.`);
+                const result = await response.json();
+                
+                showStatus('success', 'Success!', `Gmail account ${result.email} has been connected successfully. You can now close this window and return to the app.`);
                 connectBtn.style.display = 'none';
 
             } catch (error) {
-                console.error('Error saving to Supabase:', error);
+                console.error('Error saving tokens:', error);
                 throw new Error('Failed to save connection. Please try again.');
             }
         }
