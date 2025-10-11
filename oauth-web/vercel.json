@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "/public/index.html"
+      "destination": "/index.html"
     },
     {
       "source": "/callback",
-      "destination": "/public/index.html"
+      "destination": "/index.html"
     }
   ]
 }
